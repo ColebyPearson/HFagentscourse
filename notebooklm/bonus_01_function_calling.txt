@@ -1,0 +1,207 @@
+# Bonus Unit 1. Fine-tuning an LLM for Function-calling
+
+
+## Introduction
+
+# Introduction
+
+![Bonus Unit 1 Thumbnail](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit1/thumbnail.jpg)
+
+Welcome to this first **Bonus Unit**, where you'll learn to **fine-tune a Large Language Model (LLM) for function calling**.
+
+In terms of LLMs, function calling is quickly becoming a *must-know* technique. 
+
+The idea is, rather than relying only on prompt-based approaches like we did in Unit 1, function calling trains your model to **take actions and interpret observations during the training phase**, making your AI more robust.
+
+> **When should I do this Bonus Unit?**
+>
+> This section is **optional** and is more advanced than Unit 1, so don't hesitate to either do this unit now or revisit it when your knowledge has improved thanks to this course. 
+>  
+> But don't worry, this Bonus Unit is designed to have all the information you need, so we'll walk you through every core concept of fine-tuning a model for function-calling even if you haven’t learned yet the inner workings of fine-tuning.
+
+The best way for you to be able to follow this Bonus Unit is:
+
+1. Know how to Fine-Tune an LLM with Transformers, if it's not the case [check this](https://huggingface.co/learn/nlp-course/chapter3/1?fw=pt).
+
+2. Know how to use `SFTTrainer` to fine-tune our model, to learn more about it [check this documentation](https://huggingface.co/learn/nlp-course/en/chapter11/1). 
+
+---
+
+## What You’ll Learn
+
+1. **Function Calling**  
+   How modern LLMs structure their conversations effectively letting them trigger **Tools**.
+
+2. **LoRA (Low-Rank Adaptation)**  
+   A **lightweight and efficient** fine-tuning method that cuts down on computational and storage overhead. LoRA makes training large models *faster, cheaper, and easier* to deploy.
+
+3. **The Thought → Act → Observe Cycle** in Function Calling models  
+   A simple but powerful approach for structuring how your model decides when (and how) to call functions, track intermediate steps, and interpret the results from external Tools or APIs.
+
+4. **New Special Tokens**  
+   We’ll introduce **special markers** that help the model distinguish between:
+   - Internal “chain-of-thought” reasoning  
+   - Outgoing function calls  
+   - Responses coming back from external tools
+
+---
+
+By the end of this bonus unit, you’ll be able to:
+
+- **Understand** the inner working of APIs when it comes to Tools.  
+- **Fine-tune** a model using the LoRA technique.  
+- **Implement** and **modify** the Thought → Act → Observe cycle to create robust and maintainable Function-calling workflows.  
+- **Design and utilize** special tokens to seamlessly separate the model’s internal reasoning from its external actions.
+
+And you'll **have fine-tuned your own model to do function calling.** 🔥
+
+Let’s dive into **function calling**!
+
+
+## What is Function Calling?
+
+# What is Function Calling?
+
+Function-calling is a **way for an LLM to take actions on its environment**. It was first [introduced in GPT-4](https://openai.com/index/function-calling-and-other-api-updates/), and was later reproduced in other models.
+
+Just like the tools of an Agent, function-calling gives the model the capacity to **take an action on its environment**. However, the function calling capacity **is learned by the model**, and relies **less on prompting than other agents techniques**.
+
+During Unit 1, the Agent **didn't learn to use the Tools**, we just provided the list, and we relied on the fact that the model **was able to generalize on defining a plan using these Tools**. 
+
+While here, **with function-calling, the Agent is fine-tuned (trained) to use Tools**.
+
+## How does the model "learn" to take an action?
+
+In Unit 1, we explored the general workflow of an agent. Once the user has given some tools to the agent and prompted it with a query, the model will cycle through:
+
+1. *Think* : What action(s) do I need to take in order to fulfill the objective.
+2. *Act* : Format the action with the correct parameter and stop the generation.
+3. *Observe* : Get back the result from the execution.
+
+In a "typical" conversation with a model through an API, the conversation will alternate between user and assistant messages like this:
+
+```python
+conversation = [
+    {"role": "user", "content": "I need help with my order"},
+    {"role": "assistant", "content": "I'd be happy to help. Could you provide your order number?"},
+    {"role": "user", "content": "It's ORDER-123"},
+]
+```
+
+Function-calling brings **new roles to the conversation**! 
+
+1. One new role for an **Action** 
+2. One new role for an **Observation** 
+
+If we take the [Mistral API](https://docs.mistral.ai/capabilities/function_calling/) as an example, it would look like this:
+
+```python
+conversation = [
+    {
+        "role": "user",
+        "content": "What's the status of my transaction T1001?"
+    },
+    {
+        "role": "assistant",
+        "content": "",
+        "function_call": {
+            "name": "retrieve_payment_status",
+            "arguments": "{\"transaction_id\": \"T1001\"}"
+        }
+    },
+    {
+        "role": "tool",
+        "name": "retrieve_payment_status",
+        "content": "{\"status\": \"Paid\"}"
+    },
+    {
+        "role": "assistant",
+        "content": "Your transaction T1001 has been successfully paid."
+    }
+]
+```
+
+> ... But you said there's a new role for function calls?
+
+**Yes and no**, in this case and in a lot of other APIs, the model formats the action to take as an "assistant" message. The chat template will then represent this as **special tokens** for function-calling.
+
+- `[AVAILABLE_TOOLS]` – Start the list of available tools  
+- `[/AVAILABLE_TOOLS]` – End the list of available tools  
+- `[TOOL_CALLS]` – Make a call to a tool (i.e., take an "Action")  
+- `[TOOL_RESULTS]` – "Observe" the result of the action  
+- `[/TOOL_RESULTS]` – End of the observation (i.e., the model can decode again)
+
+We'll talk again about function-calling in this course, but if you want to dive deeper you can check [this excellent documentation section](https://docs.mistral.ai/capabilities/function_calling/).
+
+---
+Now that we learned what function-calling is and how it works, let's **add some function-calling capabilities to a model that does not have those capacities yet**: [google/gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it), by appending some new special tokens to the model.
+
+To be able to do that, **we need first to understand fine-tuning and LoRA**.
+
+
+## Let's Fine-Tune your model for Function-calling
+
+# Let's Fine-Tune Your Model for Function-Calling
+
+We're now ready to fine-tune our first model for function-calling 🔥.
+
+## How do we train our model for function-calling?
+
+> Answer: We need **data**
+
+A model training process can be divided into 3 steps:
+
+1. **The model is pre-trained on a large quantity of data**. The output of that step is a **pre-trained model**. For instance, [google/gemma-2-2b](https://huggingface.co/google/gemma-2-2b). It's a base model and only knows how **to predict the next token without strong instruction following capabilities**.
+
+2. To be useful in a chat context, the model then needs to be **fine-tuned** to follow instructions. In this step, it can be trained by model creators, the open-source community, you, or anyone. For instance, [google/gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it) is an instruction-tuned model by the Google Team behind the Gemma project.
+
+3. The model can then be **aligned** to the creator's preferences. For instance, a customer service chat model that must never be impolite to customers.
+
+Usually a complete product like Gemini or Mistral **will go through all 3 steps**, whereas the models you can find on Hugging Face have completed one or more steps of this training.
+
+In this tutorial, we will build a function-calling model based on [google/gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it). We choose the fine-tuned model [google/gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it) instead of the base model [google/gemma-2-2b](https://huggingface.co/google/gemma-2-2b) because the fine-tuned model has been improved for our use-case.
+
+Starting from the pre-trained model **would require more training in order to learn instruction following, chat AND function-calling**.
+
+By starting from the instruction-tuned model, **we minimize the amount of information that our model needs to learn**.
+
+## LoRA (Low-Rank Adaptation of Large Language Models)
+
+LoRA is a popular and lightweight training technique that significantly **reduces the number of trainable parameters**.
+
+It works by **inserting a smaller number of new weights as an adapter into the model to train**. This makes training with LoRA much faster, memory-efficient, and produces smaller model weights (a few hundred MBs), which are easier to store and share.
+
+<img src="https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit1/blog_multi-lora-serving_LoRA.gif" alt="LoRA inference" width="50%"/>
+
+LoRA works by adding pairs of rank decomposition matrices to Transformer layers, typically focusing on linear layers. During training, we will "freeze" the rest of the model and will only update the weights of those newly added adapters.
+
+By doing so, the number of **parameters** that we need to train drops considerably as we only need to update the adapter's weights.
+
+During inference, the input is passed into the adapter and the base model, or these adapter weights can be merged with the base model, resulting in no additional latency overhead.
+
+LoRA is particularly useful for adapting **large** language models to specific tasks or domains while keeping resource requirements manageable. This helps reduce the memory **required** to train a model.
+
+If you want to learn more about how LoRA works, you should check out this [tutorial](https://huggingface.co/learn/nlp-course/chapter11/4?fw=pt).
+
+## Fine-Tuning a Model for Function-Calling
+
+You can access the tutorial notebook 👉 [here](https://huggingface.co/agents-course/notebooks/blob/main/bonus-unit1/bonus-unit1.ipynb).
+
+Then, click on [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/#fileId=https://huggingface.co/agents-course/notebooks/blob/main/bonus-unit1/bonus-unit1.ipynb) to be able to run it in a Colab Notebook.
+
+
+## Conclusion
+
+# Conclusion [[conclusion]]
+
+Congratulations on finishing this first Bonus Unit 🥳
+
+You've just **mastered understanding function-calling and how to fine-tune your model to do function-calling**!
+
+If we have one piece of advice now, it’s to try to **fine-tune different models**. The **best way to learn is by trying.**
+
+In the next Unit, you're going to learn how to use **state-of-the-art frameworks such as `smolagents`, `LlamaIndex` and `LangGraph`**.
+
+Finally, we would love **to hear what you think of the course and how we can improve it**. If you have some feedback then, please 👉 [fill this form](https://docs.google.com/forms/d/e/1FAIpQLSe9VaONn0eglax0uTwi29rIn4tM7H2sYmmybmG5jJNlE5v0xA/viewform?usp=dialog)
+
+### Keep Learning, Stay Awesome 🤗

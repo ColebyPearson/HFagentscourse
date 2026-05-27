@@ -1,0 +1,1180 @@
+# Unit 2.2 The LlamaIndex framework
+
+
+## Introduction to LLamaIndex
+
+# Introduction to LlamaIndex
+
+Welcome to this module, where you’ll learn how to build LLM-powered agents using the [LlamaIndex](https://www.llamaindex.ai/) toolkit.
+
+LlamaIndex is **a complete toolkit for creating LLM-powered agents over your data using indexes and workflows**. For this course we'll focus on three main parts that help build agents in LlamaIndex: **Components**, **Agents and Tools** and **Workflows**.
+
+![LlamaIndex](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/thumbnail.png)
+
+Let's look at these key parts of LlamaIndex and how they help with agents:
+
+- **Components**: Are the basic building blocks you use in LlamaIndex. These include things like prompts, models, and databases. Components often help connect LlamaIndex with other tools and libraries.
+- **Tools**: Tools are components that provide specific capabilities like searching, calculating, or accessing external services. They are the building blocks that enable agents to perform tasks.
+- **Agents**: Agents are autonomous components that can use tools and make decisions. They coordinate tool usage to accomplish complex goals.
+- **Workflows**: Are step-by-step processes that process logic together. Workflows or agentic workflows are a way to structure agentic behaviour without the explicit use of agents.
+
+## What Makes LlamaIndex Special?
+
+While LlamaIndex does some things similar to other frameworks like smolagents, it has some key benefits:
+
+- **Clear Workflow System**: Workflows help break down how agents should make decisions step by step using an event-driven and async-first syntax. This helps you clearly compose and organize your logic.
+- **Advanced Document Parsing with LlamaParse**: LlamaParse was made specifically for LlamaIndex, so the integration is seamless, although it is a paid feature.
+- **Many Ready-to-Use Components**: LlamaIndex has been around for a while, so it works with lots of other frameworks. This means it has many tested and reliable components, like LLMs, retrievers, indexes, and more.
+- **LlamaHub**: is a registry of hundreds of these components, agents, and tools that you can use within LlamaIndex.
+
+All of these concepts are required in different scenarios to create useful agents.
+In the following sections, we will go over each of these concepts in detail.
+After mastering the concepts, we will use our learnings to **create applied use cases with Alfred the agent**!
+
+Getting our hands on LlamaIndex is exciting, right? So, what are we waiting for? Let's get started with **finding and installing the integrations we need using LlamaHub! 🚀**
+
+
+## Introduction to LlamaHub
+
+# Introduction to the LlamaHub
+
+**LlamaHub is a registry of hundreds of integrations, agents and tools that you can use within LlamaIndex.**
+
+![LlamaHub](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/llama-hub.png)
+
+We will be using various integrations in this course, so let's first look at the LlamaHub and how it can help us.
+
+Let's see how to find and install the dependencies for the components we need.
+
+## Installation
+
+LlamaIndex installation instructions are available as a well-structured **overview on [LlamaHub](https://llamahub.ai/)**.
+This might be a bit overwhelming at first, but most of the **installation commands generally follow an easy-to-remember format**:
+
+```bash
+pip install llama-index-{component-type}-{framework-name}
+```
+
+Let's try to install the dependencies for an LLM and embedding component using the [Hugging Face inference API integration](https://llamahub.ai/l/llms/llama-index-llms-huggingface-api?from=llms).
+
+```bash
+pip install llama-index-llms-huggingface-api llama-index-embeddings-huggingface
+```
+
+## Usage
+
+Once installed, we can see the usage patterns. You'll notice that the import paths follow the install command!
+Underneath, we can see an example of the usage of **the Hugging Face inference API for an LLM component**.
+
+```python
+from llama_index.llms.huggingface_api import HuggingFaceInferenceAPI
+
+from dotenv import load_dotenv
+
+# Load the .env file
+load_dotenv()
+
+# Retrieve HF_TOKEN from the environment variables
+hf_token = os.getenv("HF_TOKEN")
+
+llm = HuggingFaceInferenceAPI(
+    model_name="Qwen/Qwen2.5-Coder-32B-Instruct",
+    temperature=0.7,
+    max_tokens=100,
+    token=hf_token,
+    provider="auto"
+)
+
+response = llm.complete("Hello, how are you?")
+print(response)
+# I am good, how can I help you today?
+```
+
+Wonderful, we now know how to find, install and use the integrations for the components we need.
+**Let's dive deeper into the components** and see how we can use them to build our own agents.
+
+
+## What are Components in LlamaIndex?
+
+# What are components in LlamaIndex?
+
+Remember Alfred, our helpful butler agent from Unit 1?
+To assist us effectively, Alfred needs to understand our requests and **prepare, find and use relevant information to help complete tasks.**
+This is where LlamaIndex's components come in.
+
+While LlamaIndex has many components, **we'll focus specifically on the `QueryEngine` component.**
+Why? Because it can be used as a Retrieval-Augmented Generation (RAG) tool for an agent.
+
+So, what is RAG? LLMs are trained on enormous bodies of data to learn general knowledge.
+However, they may not be trained on relevant and up-to-date data.
+RAG solves this problem by finding and retrieving relevant information from your data and giving that to the LLM.
+
+![RAG](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/rag.png)
+
+Now, think about how Alfred works:
+
+1. You ask Alfred to help plan a dinner party
+2. Alfred needs to check your calendar, dietary preferences, and past successful menus
+3. The `QueryEngine` helps Alfred find this information and use it to plan the dinner party
+
+This makes the `QueryEngine` **a key component for building agentic RAG workflows** in LlamaIndex.
+Just as Alfred needs to search through your household information to be helpful, any agent needs a way to find and understand relevant data.
+The `QueryEngine` provides exactly this capability.
+
+Now, let's dive a bit deeper into the components and see how you can **combine components to create a RAG pipeline.**
+
+## Creating a RAG pipeline using components
+
+> [!TIP]
+> You can follow the code in <a href="https://huggingface.co/agents-course/notebooks/blob/main/unit2/llama-index/components.ipynb" target="_blank">this notebook</a> that you can run using Google Colab.
+
+There are five key stages within RAG, which in turn will be a part of most larger applications you build. These are:
+
+1. **Loading**: this refers to getting your data from where it lives -- whether it's text files, PDFs, another website, a database, or an API -- into your workflow. LlamaHub provides hundreds of integrations to choose from.
+2. **Indexing**: this means creating a data structure that allows for querying the data. For LLMs, this nearly always means creating vector embeddings. Which are numerical representations of the meaning of the data. Indexing can also refer to numerous other metadata strategies to make it easy to accurately find contextually relevant data based on properties.
+3. **Storing**: once your data is indexed you will want to store your index, as well as other metadata, to avoid having to re-index it.
+4. **Querying**: for any given indexing strategy there are many ways you can utilize LLMs and LlamaIndex data structures to query, including sub-queries, multi-step queries and hybrid strategies.
+5. **Evaluation**: a critical step in any flow is checking how effective it is relative to other strategies, or when you make changes. Evaluation provides objective measures of how accurate, faithful and fast your responses to queries are.
+
+Next, let's see how we can reproduce these stages using components.
+
+### Loading and embedding documents
+
+As mentioned before, LlamaIndex can work on top of your own data, however, **before accessing data, we need to load it.**
+There are three main ways to load data into LlamaIndex:
+
+1. `SimpleDirectoryReader`: A built-in loader for various file types from a local directory.
+2. `LlamaParse`: LlamaParse, LlamaIndex's official tool for PDF parsing, available as a managed API.
+3. `LlamaHub`: A registry of hundreds of data-loading libraries to ingest data from any source.
+
+> [!TIP]
+> Get familiar with <a href="https://docs.llamaindex.ai/en/stable/module_guides/loading/connector/">LlamaHub</a> loaders and <a href="https://github.com/run-llama/llama_cloud_services/blob/main/parse.md">LlamaParse</a> parser for more complex data sources.
+
+**The simplest way to load data is with `SimpleDirectoryReader`.**
+This versatile component can load various file types from a folder and convert them into `Document` objects that LlamaIndex can work with.
+Let's see how we can use `SimpleDirectoryReader` to load data from a folder.
+
+```python
+from llama_index.core import SimpleDirectoryReader
+
+reader = SimpleDirectoryReader(input_dir="path/to/directory")
+documents = reader.load_data()
+```
+
+After loading our documents, we need to break them into smaller pieces called `Node` objects.
+A `Node` is just a chunk of text from the original document that's easier for the AI to work with, while it still has references to the original `Document` object.
+
+The `IngestionPipeline` helps us create these nodes through two key transformations.
+1. `SentenceSplitter` breaks down documents into manageable chunks by splitting them at natural sentence boundaries.
+2. `HuggingFaceEmbedding` converts each chunk into numerical embeddings - vector representations that capture the semantic meaning in a way AI can process efficiently.
+
+This process helps us organise our documents in a way that's more useful for searching and analysis.
+
+```python
+from llama_index.core import Document
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.ingestion import IngestionPipeline
+
+# create the pipeline with transformations
+pipeline = IngestionPipeline(
+    transformations=[
+        SentenceSplitter(chunk_overlap=0),
+        HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5"),
+    ]
+)
+
+nodes = await pipeline.arun(documents=[Document.example()])
+```
+
+### Storing and indexing documents
+
+After creating our `Node` objects we need to index them to make them searchable, but before we can do that, we need a place to store our data.
+
+Since we are using an ingestion pipeline, we can directly attach a vector store to the pipeline to populate it.
+In this case, we will use `Chroma` to store our documents.
+
+<details>
+<summary>Install ChromaDB</summary>
+
+As introduced in the <a href="./llama-hub">section on the LlamaHub</a>, we can install the ChromaDB vector store with the following command:
+
+```bash
+pip install llama-index-vector-stores-chroma
+```
+</details>
+
+```python
+
+from llama_index.vector_stores.chroma import ChromaVectorStore
+
+db = chromadb.PersistentClient(path="./alfred_chroma_db")
+chroma_collection = db.get_or_create_collection("alfred")
+vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+
+pipeline = IngestionPipeline(
+    transformations=[
+        SentenceSplitter(chunk_size=25, chunk_overlap=0),
+        HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5"),
+    ],
+    vector_store=vector_store,
+)
+```
+
+> [!TIP]
+> An overview of the different vector stores can be found in the <a href="https://docs.llamaindex.ai/en/stable/module_guides/storing/vector_stores/">LlamaIndex documentation</a>.
+
+This is where vector embeddings come in - by embedding both the query and nodes in the same vector space, we can find relevant matches.
+The `VectorStoreIndex` handles this for us, using the same embedding model we used during ingestion to ensure consistency.
+
+Let's see how to create this index from our vector store and embeddings:
+
+```python
+from llama_index.core import VectorStoreIndex
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+
+embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
+index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
+```
+
+All information is automatically persisted within the `ChromaVectorStore` object and the passed directory path.
+
+Great! Now that we can save and load our index easily, let's explore how to query it in different ways.
+
+### Querying a VectorStoreIndex with prompts and LLMs
+
+Before we can query our index, we need to convert it to a query interface. The most common conversion options are:
+
+- `as_retriever`: For basic document retrieval, returning a list of `NodeWithScore` objects with similarity scores
+- `as_query_engine`: For single question-answer interactions, returning a written response
+- `as_chat_engine`: For conversational interactions that maintain memory across multiple messages, returning a written response using chat history and indexed context
+
+We'll focus on the query engine since it is more common for agent-like interactions.
+We also pass in an LLM to the query engine to use for the response.
+
+```python
+from llama_index.llms.huggingface_api import HuggingFaceInferenceAPI
+
+llm = HuggingFaceInferenceAPI(model_name="Qwen/Qwen2.5-Coder-32B-Instruct")
+query_engine = index.as_query_engine(
+    llm=llm,
+    response_mode="tree_summarize",
+)
+query_engine.query("What is the meaning of life?")
+# The meaning of life is 42
+```
+
+### Response Processing
+
+Under the hood, the query engine doesn't only use the LLM to answer the question but also uses a `ResponseSynthesizer` as a strategy to process the response.
+Once again, this is fully customisable but there are three main strategies that work well out of the box:
+
+- `refine`: create and refine an answer by sequentially going through each retrieved text chunk. This makes a separate LLM call per Node/retrieved chunk.
+- `compact` (default): similar to refining but concatenating the chunks beforehand, resulting in fewer LLM calls.
+- `tree_summarize`: create a detailed answer by going through each retrieved text chunk and creating a tree structure of the answer.
+
+> [!TIP]
+> Take fine-grained control of your query workflows with the <a href="https://docs.llamaindex.ai/en/stable/module_guides/deploying/query_engine/usage_pattern/#low-level-composition-api">low-level composition API</a>. This API lets you customize and fine-tune every step of the query process to match your exact needs, which also pairs great with <a href="https://docs.llamaindex.ai/en/stable/module_guides/workflow/">Workflows</a>
+
+The language model won't always perform in predictable ways, so we can't be sure that the answer we get is always correct. We can deal with this by **evaluating the quality of the answer**.
+
+### Evaluation and observability
+
+LlamaIndex provides **built-in evaluation tools to assess response quality.**
+These evaluators leverage LLMs to analyze responses across different dimensions.
+Let's look at the three main evaluators available:
+
+- `FaithfulnessEvaluator`: Evaluates the faithfulness of the answer by checking if the answer is supported by the context.
+- `AnswerRelevancyEvaluator`: Evaluate the relevance of the answer by checking if the answer is relevant to the question.
+- `CorrectnessEvaluator`: Evaluate the correctness of the answer by checking if the answer is correct.
+
+> [!TIP]
+> Want to learn more about agent observability and evaluation? Continue your journey with the <a href="https://huggingface.co/learn/agents-course/bonus-unit2/introduction">Bonus Unit 2</a>.
+
+```python
+from llama_index.core.evaluation import FaithfulnessEvaluator
+
+query_engine = # from the previous section
+llm = # from the previous section
+
+# query index
+evaluator = FaithfulnessEvaluator(llm=llm)
+response = query_engine.query(
+    "What battles took place in New York City in the American Revolution?"
+)
+eval_result = evaluator.evaluate_response(response=response)
+eval_result.passing
+```
+
+Even without direct evaluation, we can **gain insights into how our system is performing through observability.**
+This is especially useful when we are building more complex workflows and want to understand how each component is performing.
+
+<details>
+<summary>Install LlamaTrace</summary>
+
+As introduced in the <a href="./llama-hub">section on the LlamaHub</a>, we can install the LlamaTrace callback from Arize Phoenix with the following command:
+
+```bash
+pip install -U llama-index-callbacks-arize-phoenix
+```
+
+Additionally, we need to set the `PHOENIX_API_KEY` environment variable to our LlamaTrace API key. We can get this by:
+- Creating an account at [LlamaTrace](https://llamatrace.com/login)
+- Generating an API key in your account settings
+- Using the API key in the code below to enable tracing
+
+</details>
+
+```python
+
+PHOENIX_API_KEY = "<PHOENIX_API_KEY>"
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"api_key={PHOENIX_API_KEY}"
+llama_index.core.set_global_handler(
+    "arize_phoenix",
+    endpoint="https://llamatrace.com/v1/traces"
+)
+```
+
+> [!TIP]
+> Want to learn more about components and how to use them? Continue your journey with the <a href="https://docs.llamaindex.ai/en/stable/module_guides/">Components Guides</a> or the <a href="https://docs.llamaindex.ai/en/stable/understanding/rag/">Guide on RAG</a>.
+
+We have seen how to use components to create a `QueryEngine`. Now, let's see how we can **use the `QueryEngine` as a tool for an agent!**
+
+
+## Using Tools in LlamaIndex
+
+# Using Tools in LlamaIndex
+
+**Defining a clear set of Tools is crucial to performance.** As we discussed in [unit 1](../../unit1/tools), clear tool interfaces are easier for LLMs to use.
+Much like a software API interface for human engineers, they can get more out of the tool if it's easy to understand how it works.
+
+There are **four main types of tools in LlamaIndex**:
+
+![Tools](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/tools.png)
+
+1. `FunctionTool`: Convert any Python function into a tool that an agent can use. It automatically figures out how the function works.
+2. `QueryEngineTool`: A tool that lets agents use query engines. Since agents are built on query engines, they can also use other agents as tools.
+3. `Toolspecs`: Sets of tools created by the community, which often include tools for specific services like Gmail.
+4. `Utility Tools`: Special tools that help handle large amounts of data from other tools.
+
+We will go over each of them in more detail below.
+
+## Creating a FunctionTool
+
+> [!TIP]
+> You can follow the code in <a href="https://huggingface.co/agents-course/notebooks/blob/main/unit2/llama-index/tools.ipynb" target="_blank">this notebook</a> that you can run using Google Colab.
+
+A FunctionTool provides a simple way to wrap any Python function and make it available to an agent.
+You can pass either a synchronous or asynchronous function to the tool, along with optional `name` and `description` parameters.
+The name and description are particularly important as they help the agent understand when and how to use the tool effectively.
+Let's look at how to create a FunctionTool below and then call it.
+
+```python
+from llama_index.core.tools import FunctionTool
+
+def get_weather(location: str) -> str:
+    """Useful for getting the weather for a given location."""
+    print(f"Getting weather for {location}")
+    return f"The weather in {location} is sunny"
+
+tool = FunctionTool.from_defaults(
+    get_weather,
+    name="my_weather_tool",
+    description="Useful for getting the weather for a given location.",
+)
+tool.call("New York")
+```
+
+> [!TIP]
+> When using an agent or LLM with function calling, the tool selected (and the arguments written for that tool) rely strongly on the tool name and description of the purpose and arguments of the tool. Learn more about function calling in the <a href="https://docs.llamaindex.ai/en/stable/examples/workflow/function_calling_agent/">Function Calling Guide</a>.
+
+## Creating a QueryEngineTool
+
+The `QueryEngine` we defined in the previous unit can be easily transformed into a tool using the `QueryEngineTool` class.
+Let's see how to create a `QueryEngineTool` from a `QueryEngine` in the example below.
+
+```python
+from llama_index.core import VectorStoreIndex
+from llama_index.core.tools import QueryEngineTool
+from llama_index.llms.huggingface_api import HuggingFaceInferenceAPI
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.vector_stores.chroma import ChromaVectorStore
+
+embed_model = HuggingFaceEmbedding("BAAI/bge-small-en-v1.5")
+
+db = chromadb.PersistentClient(path="./alfred_chroma_db")
+chroma_collection = db.get_or_create_collection("alfred")
+vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+
+index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
+
+llm = HuggingFaceInferenceAPI(model_name="Qwen/Qwen2.5-Coder-32B-Instruct")
+query_engine = index.as_query_engine(llm=llm)
+tool = QueryEngineTool.from_defaults(query_engine, name="some useful name", description="some useful description")
+```
+
+## Creating Toolspecs
+
+Think of `ToolSpecs` as collections of tools that work together harmoniously - like a well-organized professional toolkit.
+Just as a mechanic's toolkit contains complementary tools that work together for vehicle repairs, a `ToolSpec` combines related tools for specific purposes.
+For example, an accounting agent's `ToolSpec` might elegantly integrate spreadsheet capabilities, email functionality, and calculation tools to handle financial tasks with precision and efficiency.
+
+<details>
+<summary>Install the Google Toolspec</summary>
+As introduced in the <a href="./llama-hub">section on the LlamaHub</a>, we can install the Google toolspec with the following command:
+
+```python
+pip install llama-index-tools-google
+```
+</details>
+
+And now we can load the toolspec and convert it to a list of tools.
+
+```python
+from llama_index.tools.google import GmailToolSpec
+
+tool_spec = GmailToolSpec()
+tool_spec_list = tool_spec.to_tool_list()
+```
+
+To get a more detailed view of the tools, we can take a look at the `metadata` of each tool.
+
+```python
+[(tool.metadata.name, tool.metadata.description) for tool in tool_spec_list]
+```
+
+### Model Context Protocol (MCP) in LlamaIndex
+
+LlamaIndex also allows using MCP tools through a [ToolSpec on the LlamaHub](https://llamahub.ai/l/tools/llama-index-tools-mcp?from=).
+You can simply run an MCP server and start using it through the following implementation.
+
+If you want to dive deeper about MCP, you can check our [free MCP Course](https://huggingface.co/learn/mcp-course/). 
+
+<details>
+<summary>Install the MCP Toolspec</summary>
+As introduced in the <a href="./llama-hub">section on the LlamaHub</a>, we can install the MCP toolspec with the following command:
+
+```python
+pip install llama-index-tools-mcp
+```
+</details>
+
+```python
+from llama_index.tools.mcp import BasicMCPClient, McpToolSpec
+
+# We consider there is a mcp server running on 127.0.0.1:8000, or you can use the mcp client to connect to your own mcp server.
+mcp_client = BasicMCPClient("http://127.0.0.1:8000/sse")
+mcp_tool = McpToolSpec(client=mcp_client)
+
+# get the agent
+agent = await get_agent(mcp_tool)
+
+# create the agent context
+agent_context = Context(agent)
+```
+
+## Utility Tools
+
+Oftentimes, directly querying an API **can return an excessive amount of data**, some of which may be irrelevant, overflow the context window of the LLM, or unnecessarily increase the number of tokens that you are using.
+Let's walk through our two main utility tools below.
+
+1. `OnDemandToolLoader`: This tool turns any existing LlamaIndex data loader (BaseReader class) into a tool that an agent can use. The tool can be called with all the parameters needed to trigger `load_data` from the data loader, along with a natural language query string. During execution, we first load data from the data loader, index it (for instance with a vector store), and then query it 'on-demand'. All three of these steps happen in a single tool call.
+2. `LoadAndSearchToolSpec`: The LoadAndSearchToolSpec takes in any existing Tool as input. As a tool spec, it implements `to_tool_list`, and when that function is called, two tools are returned: a loading tool and then a search tool. The load Tool execution would call the underlying Tool, and then index the output (by default with a vector index). The search Tool execution would take in a query string as input and call the underlying index.
+
+> [!TIP]
+> You can find toolspecs and utility tools on the <a href="https://llamahub.ai/">LlamaHub</a>
+
+Now that we understand the basics of agents and tools in LlamaIndex, let's see how we can **use LlamaIndex to create configurable and manageable workflows!**
+
+
+## Quick Quiz 1
+
+# Small Quiz (ungraded) [[quiz1]]
+
+So far we've discussed the key components and tools used in LlamaIndex.
+It's time to make a short quiz, since **testing yourself** is the best way to learn and [to avoid the illusion of competence](https://www.coursera.org/lecture/learning-how-to-learn/illusions-of-competence-BuFzf).
+This will help you find **where you need to reinforce your knowledge**.
+
+This is an optional quiz and it's not graded.
+
+### Q1: What is a QueryEngine?
+Which of the following best describes a QueryEngine component?
+
+<Question
+choices={[
+{
+text: "A system that only processes static text without any retrieval capabilities.",
+explain: "A QueryEngine must be able to retrieve and process relevant information.",
+},
+{
+text: "A component that finds and retrieves relevant information as part of the RAG process.",
+explain: "This captures the core purpose of a QueryEngine component.",
+correct: true
+},
+{
+text: "A tool that only stores vector embeddings without search functionality.",
+explain: "A QueryEngine does more than just store embeddings - it actively searches and retrieves information.",
+},
+{
+text: "A component that only evaluates response quality.",
+explain: "Evaluation is separate from the QueryEngine's main retrieval purpose.",
+}
+]}
+/>
+
+---
+
+### Q2: What is the Purpose of FunctionTools?
+Why are FunctionTools important for an Agent?
+
+<Question
+choices={[
+{
+text: "To handle large amounts of data storage.",
+explain: "FunctionTools are not primarily for data storage.",
+},
+{
+text: "To convert Python functions into tools that an agent can use.",
+explain: "FunctionTools wrap Python functions to make them accessible to agents.",
+correct: true
+},
+{
+text: "To allow agents to create random functions definitions.",
+explain: "FunctionTools serve the specific purpose of making functions available to agents.",
+},
+{
+text: "To only process text data.",
+explain: "FunctionTools can work with various types of functions, not just text processing.",
+}
+]}
+/>
+
+---
+
+### Q3: What are Toolspecs in LlamaIndex?
+What is the main purpose of Toolspecs?
+
+<Question
+choices={[
+{
+text: "They are redundant components that don't add functionality.",
+explain: "Toolspecs serve an important purpose in the LlamaIndex ecosystem.",
+},
+{
+text: "They are sets of community-created tools that extend agent capabilities.",
+explain: "Toolspecs allow the community to share and reuse tools.",
+correct: true
+},
+{
+text: "They are used solely for memory management.",
+explain: "Toolspecs are about providing tools, not managing memory.",
+},
+{
+text: "They only work with text processing.",
+explain: "Toolspecs can include various types of tools, not just text processing.",
+}
+]}
+/>
+
+---
+
+### Q4: What is Required to create a tool?
+What information must be included when creating a tool?
+
+<Question
+choices={[
+{
+text: "A function, a name, and description must be defined.",
+explain: "While these all make up a tool, the name and description can be parsed from the function and docstring.",
+},
+{
+text: "Only the name is required.",
+explain: "A function and description/docstring is also required for proper tool documentation.",
+},
+{
+text: "Only the description is required.",
+explain: "A function is required so that we have code to run when an agent selects a tool",
+},
+{
+text: "Only the function is required.",
+explain: "The name and description default to the name and docstring from the provided function",
+correct: true
+}
+]}
+/>
+
+---
+
+Congrats on finishing this Quiz 🥳, if you missed some elements, take time to read again the chapter to reinforce your knowledge. If you pass it, you're ready to dive deeper into building with these components!
+
+
+## Using Agents in LlamaIndex
+
+# Using Agents in LlamaIndex
+
+Remember Alfred, our helpful butler agent from earlier? Well, he's about to get an upgrade!
+Now that we understand the tools available in LlamaIndex, we can give Alfred new capabilities to serve us better.
+
+But before we continue, let's remind ourselves what makes an agent like Alfred tick.
+Back in Unit 1, we learned that:
+
+> An Agent is a system that leverages an AI model to interact with its environment to achieve a user-defined objective. It combines reasoning, planning, and action execution (often via external tools) to fulfil tasks.
+
+LlamaIndex supports **three main types of reasoning agents:**
+
+![Agents](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/agents.png)
+
+1. `Function Calling Agents` - These work with AI models that can call specific functions.
+2. `ReAct Agents` - These can work with any AI that does chat or text endpoint and deal with complex reasoning tasks.
+3. `Advanced Custom Agents` - These use more complex methods to deal with more complex tasks and workflows.
+
+> [!TIP]
+> Find more information on advanced agents on <a href="https://github.com/run-llama/llama_index/blob/main/llama-index-core/llama_index/core/agent/workflow/base_agent.py">BaseWorkflowAgent</a>
+
+## Initialising Agents
+
+> [!TIP]
+> You can follow the code in <a href="https://huggingface.co/agents-course/notebooks/blob/main/unit2/llama-index/agents.ipynb" target="_blank">this notebook</a> that you can run using Google Colab.
+
+To create an agent, we start by providing it with a **set of functions/tools that define its capabilities**.
+Let's look at how to create an agent with some basic tools. As of this writing, the agent will automatically use the function calling API (if available), or a standard ReAct agent loop.
+
+LLMs that support a tools/functions API are relatively new, but they provide a powerful way to call tools by avoiding specific prompting and allowing the LLM to create tool calls based on provided schemas.
+
+ReAct agents are also good at complex reasoning tasks and can work with any LLM that has chat or text completion capabilities. They are more verbose, and show the reasoning behind certain actions that they take.
+
+```python
+from llama_index.llms.huggingface_api import HuggingFaceInferenceAPI
+from llama_index.core.agent.workflow import AgentWorkflow
+from llama_index.core.tools import FunctionTool
+
+# define sample Tool -- type annotations, function names, and docstrings, are all included in parsed schemas!
+def multiply(a: int, b: int) -> int:
+    """Multiplies two integers and returns the resulting integer"""
+    return a * b
+
+# initialize llm
+llm = HuggingFaceInferenceAPI(model_name="Qwen/Qwen2.5-Coder-32B-Instruct")
+
+# initialize agent
+agent = AgentWorkflow.from_tools_or_functions(
+    [FunctionTool.from_defaults(multiply)],
+    llm=llm
+)
+```
+
+**Agents are stateless by default**, however, they can remember past interactions using a `Context` object.
+This might be useful if you want to use an agent that needs to remember previous interactions, like a chatbot that maintains context across multiple messages or a task manager that needs to track progress over time.
+
+```python
+# stateless
+response = await agent.run("What is 2 times 2?")
+
+# remembering state
+from llama_index.core.workflow import Context
+
+ctx = Context(agent)
+
+response = await agent.run("My name is Bob.", ctx=ctx)
+response = await agent.run("What was my name again?", ctx=ctx)
+```
+
+You'll notice that agents in `LlamaIndex` are async because they use Python's `await` operator. If you are new to async code in Python, or need a refresher, they have an [excellent async guide](https://docs.llamaindex.ai/en/stable/getting_started/async_python/).
+
+Now we've gotten the basics, let's take a look at how we can use more complex tools in our agents.
+
+## Creating RAG Agents with QueryEngineTools
+
+**Agentic RAG is a powerful way to use agents to answer questions about your data.** We can pass various tools to Alfred to help him answer questions.
+However, instead of answering the question on top of documents automatically, Alfred can decide to use any other tool or flow to answer the question.
+
+![Agentic RAG](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/agentic-rag.png)
+
+It is easy to **wrap `QueryEngine` as a tool** for an agent.
+When doing so, we need to **define a name and description**. The LLM will use this information to correctly use the tool.
+Let's see how to load in a `QueryEngineTool` using the `QueryEngine` we created in the [component section](components).
+
+```python
+from llama_index.core.tools import QueryEngineTool
+
+query_engine = index.as_query_engine(llm=llm, similarity_top_k=3) # as shown in the Components in LlamaIndex section
+
+query_engine_tool = QueryEngineTool.from_defaults(
+    query_engine=query_engine,
+    name="name",
+    description="a specific description",
+    return_direct=False,
+)
+query_engine_agent = AgentWorkflow.from_tools_or_functions(
+    [query_engine_tool],
+    llm=llm,
+    system_prompt="You are a helpful assistant that has access to a database containing persona descriptions. "
+)
+```
+
+## Creating Multi-agent systems
+
+The `AgentWorkflow` class also directly supports multi-agent systems. By giving each agent a name and description, the system maintains a single active speaker, with each agent having the ability to hand off to another agent.
+
+By narrowing the scope of each agent, we can help increase their general accuracy when responding to user messages.
+
+**Agents in LlamaIndex can also directly be used as tools** for other agents, for more complex and custom scenarios.
+
+```python
+from llama_index.core.agent.workflow import (
+    AgentWorkflow,
+    FunctionAgent,
+    ReActAgent,
+)
+
+# Define some tools
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+def subtract(a: int, b: int) -> int:
+    """Subtract two numbers."""
+    return a - b
+
+# Create agent configs
+# NOTE: we can use FunctionAgent or ReActAgent here.
+# FunctionAgent works for LLMs with a function calling API.
+# ReActAgent works for any LLM.
+calculator_agent = ReActAgent(
+    name="calculator",
+    description="Performs basic arithmetic operations",
+    system_prompt="You are a calculator assistant. Use your tools for any math operation.",
+    tools=[add, subtract],
+    llm=llm,
+)
+
+query_agent = ReActAgent(
+    name="info_lookup",
+    description="Looks up information about XYZ",
+    system_prompt="Use your tool to query a RAG system to answer information about XYZ",
+    tools=[query_engine_tool],
+    llm=llm
+)
+
+# Create and run the workflow
+agent = AgentWorkflow(
+    agents=[calculator_agent, query_agent], root_agent="calculator"
+)
+
+# Run the system
+response = await agent.run(user_msg="Can you add 5 and 3?")
+```
+
+> [!TIP]
+> Haven't learned enough yet? There is a lot more to discover about agents and tools in LlamaIndex within the <a href="https://docs.llamaindex.ai/en/stable/examples/agent/agent_workflow_basic/">AgentWorkflow Basic Introduction</a> or the <a href="https://docs.llamaindex.ai/en/stable/understanding/agent/">Agent Learning Guide</a>, where you can read more about streaming, context serialization, and human-in-the-loop!
+
+Now that we understand the basics of agents and tools in LlamaIndex, let's see how we can use LlamaIndex to **create configurable and manageable workflows!**
+
+
+## Creating Agentic Workflows in LlamaIndex
+
+# Creating agentic workflows in LlamaIndex
+
+A workflow in LlamaIndex provides a structured way to organize your code into sequential and manageable steps.
+
+Such a workflow is created by defining `Steps` which are triggered by `Events`, and themselves emit `Events` to trigger further steps.
+Let's take a look at Alfred showing a LlamaIndex workflow for a RAG task.
+
+![Workflow Schematic](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/workflows.png)
+
+**Workflows offer several key benefits:**
+
+- Clear organization of code into discrete steps
+- Event-driven architecture for flexible control flow
+- Type-safe communication between steps
+- Built-in state management
+- Support for both simple and complex agent interactions
+
+As you might have guessed, **workflows strike a great balance between the autonomy of agents while maintaining control over the overall workflow.**
+
+So, let's learn how to create a workflow ourselves!
+
+## Creating Workflows
+
+> [!TIP]
+> You can follow the code in <a href="https://huggingface.co/agents-course/notebooks/blob/main/unit2/llama-index/workflows.ipynb" target="_blank">this notebook</a> that you can run using Google Colab.
+
+### Basic Workflow Creation
+
+<details>
+<summary>Install the Workflow package</summary>
+As introduced in the <a href="./llama-hub">section on the LlamaHub</a>, we can install the Workflow package with the following command:
+
+```python
+pip install llama-index-utils-workflow
+```
+</details>
+
+We can create a single-step workflow by defining a class that inherits from `Workflow` and decorating your functions with `@step`.
+We will also need to add `StartEvent` and `StopEvent`, which are special events that are used to indicate the start and end of the workflow.
+
+```python
+from llama_index.core.workflow import StartEvent, StopEvent, Workflow, step
+
+class MyWorkflow(Workflow):
+    @step
+    async def my_step(self, ev: StartEvent) -> StopEvent:
+        # do something here
+        return StopEvent(result="Hello, world!")
+
+w = MyWorkflow(timeout=10, verbose=False)
+result = await w.run()
+```
+
+As you can see, we can now run the workflow by calling `w.run()`.
+
+### Connecting Multiple Steps
+
+To connect multiple steps, we **create custom events that carry data between steps.**
+To do so, we need to add an `Event` that is passed between the steps and transfers the output of the first step to the second step.
+
+```python
+from llama_index.core.workflow import Event
+
+class ProcessingEvent(Event):
+    intermediate_result: str
+
+class MultiStepWorkflow(Workflow):
+    @step
+    async def step_one(self, ev: StartEvent) -> ProcessingEvent:
+        # Process initial data
+        return ProcessingEvent(intermediate_result="Step 1 complete")
+
+    @step
+    async def step_two(self, ev: ProcessingEvent) -> StopEvent:
+        # Use the intermediate result
+        final_result = f"Finished processing: {ev.intermediate_result}"
+        return StopEvent(result=final_result)
+
+w = MultiStepWorkflow(timeout=10, verbose=False)
+result = await w.run()
+result
+```
+
+The type hinting is important here, as it ensures that the workflow is executed correctly. Let's complicate things a bit more!
+
+### Loops and Branches
+
+The type hinting is the most powerful part of workflows because it allows us to create branches, loops, and joins to facilitate more complex workflows.
+
+Let's show an example of **creating a loop** by using the union operator `|`.
+In the example below, we see that the `LoopEvent` is taken as input for the step and can also be returned as output.
+
+```python
+from llama_index.core.workflow import Event
+
+class ProcessingEvent(Event):
+    intermediate_result: str
+
+class LoopEvent(Event):
+    loop_output: str
+
+class MultiStepWorkflow(Workflow):
+    @step
+    async def step_one(self, ev: StartEvent | LoopEvent) -> ProcessingEvent | LoopEvent:
+        if random.randint(0, 1) == 0:
+            print("Bad thing happened")
+            return LoopEvent(loop_output="Back to step one.")
+        else:
+            print("Good thing happened")
+            return ProcessingEvent(intermediate_result="First step complete.")
+
+    @step
+    async def step_two(self, ev: ProcessingEvent) -> StopEvent:
+        # Use the intermediate result
+        final_result = f"Finished processing: {ev.intermediate_result}"
+        return StopEvent(result=final_result)
+
+w = MultiStepWorkflow(verbose=False)
+result = await w.run()
+result
+```
+
+### Drawing Workflows
+
+We can also draw workflows. Let's use the `draw_all_possible_flows` function to draw the workflow. This stores the workflow in an HTML file.
+
+```python
+from llama_index.utils.workflow import draw_all_possible_flows
+
+w = ... # as defined in the previous section
+draw_all_possible_flows(w, "flow.html")
+```
+
+![workflow drawing](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/unit2/llama-index/workflow-draw.png)
+
+There is one last cool trick that we will cover in the course, which is the ability to add state to the workflow.
+
+### State Management
+
+State management is useful when you want to keep track of the state of the workflow, so that every step has access to the same state.
+We can do this by using the `Context` type hint on top of a parameter in the step function.
+
+```python
+from llama_index.core.workflow import Context, StartEvent, StopEvent
+
+@step
+async def query(self, ctx: Context, ev: StartEvent) -> StopEvent:
+    # store query in the context
+    await ctx.store.set("query", "What is the capital of France?")
+
+    # do something with context and event
+    val = ...
+
+    # retrieve query from the context
+    query = await ctx.store.get("query")
+
+    return StopEvent(result=val)
+```
+
+Great! Now you know how to create basic workflows in LlamaIndex!
+
+> [!TIP]
+> There are some more complex nuances to workflows, which you can learn about in <a href="https://docs.llamaindex.ai/en/stable/understanding/workflows/">the LlamaIndex documentation</a>.
+
+However, there is another way to create workflows, which relies on the `AgentWorkflow` class. Let's take a look at how we can use this to create a multi-agent workflow.
+
+## Automating workflows with Multi-Agent Workflows
+
+Instead of manual workflow creation, we can use the **`AgentWorkflow` class to create a multi-agent workflow**.
+The `AgentWorkflow` uses Workflow Agents to allow you to create a system of one or more agents that can collaborate and hand off tasks to each other based on their specialized capabilities.
+This enables building complex agent systems where different agents handle different aspects of a task.
+Instead of importing classes from `llama_index.core.agent`, we will import the agent classes from `llama_index.core.agent.workflow`.
+One agent must be designated as the root agent in the `AgentWorkflow` constructor.
+When a user message comes in, it is first routed to the root agent.
+
+Each agent can then:
+
+- Handle the request directly using their tools
+- Handoff to another agent better suited for the task
+- Return a response to the user
+
+Let's see how to create a multi-agent workflow.
+
+```python
+from llama_index.core.agent.workflow import AgentWorkflow, ReActAgent
+from llama_index.llms.huggingface_api import HuggingFaceInferenceAPI
+
+# Define some tools
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+llm = HuggingFaceInferenceAPI(model_name="Qwen/Qwen2.5-Coder-32B-Instruct")
+
+# we can pass functions directly without FunctionTool -- the fn/docstring are parsed for the name/description
+multiply_agent = ReActAgent(
+    name="multiply_agent",
+    description="Is able to multiply two integers",
+    system_prompt="A helpful assistant that can use a tool to multiply numbers.",
+    tools=[multiply],
+    llm=llm,
+)
+
+addition_agent = ReActAgent(
+    name="add_agent",
+    description="Is able to add two integers",
+    system_prompt="A helpful assistant that can use a tool to add numbers.",
+    tools=[add],
+    llm=llm,
+)
+
+# Create the workflow
+workflow = AgentWorkflow(
+    agents=[multiply_agent, addition_agent],
+    root_agent="multiply_agent",
+)
+
+# Run the system
+response = await workflow.run(user_msg="Can you add 5 and 3?")
+```
+
+Agent tools can also modify the workflow state we mentioned earlier. Before starting the workflow, we can provide an initial state dict that will be available to all agents.
+The state is stored in the state key of the workflow context. It will be injected into the state_prompt which augments each new user message.
+
+Let's inject a counter to count function calls by modifying the previous example:
+
+```python
+from llama_index.core.workflow import Context
+
+# Define some tools
+async def add(ctx: Context, a: int, b: int) -> int:
+    """Add two numbers."""
+    # update our count
+    cur_state = await ctx.store.get("state")
+    cur_state["num_fn_calls"] += 1
+    await ctx.store.set("state", cur_state)
+
+    return a + b
+
+async def multiply(ctx: Context, a: int, b: int) -> int:
+    """Multiply two numbers."""
+    # update our count
+    cur_state = await ctx.store.get("state")
+    cur_state["num_fn_calls"] += 1
+    await ctx.store.set("state", cur_state)
+
+    return a * b
+
+...
+
+workflow = AgentWorkflow(
+    agents=[multiply_agent, addition_agent],
+    root_agent="multiply_agent",
+    initial_state={"num_fn_calls": 0},
+    state_prompt="Current state: {state}. User message: {msg}",
+)
+
+# run the workflow with context
+ctx = Context(workflow)
+response = await workflow.run(user_msg="Can you add 5 and 3?", ctx=ctx)
+
+# pull out and inspect the state
+state = await ctx.store.get("state")
+print(state["num_fn_calls"])
+```
+
+Congratulations! You have now mastered the basics of Agents in LlamaIndex! 🎉
+
+Let's continue with one final quiz to solidify your knowledge! 🚀
+
+
+## Quick Quiz 2
+
+# Quick Self-Check (ungraded) [[quiz2]]
+
+What?! Another Quiz? We know, we know, ... 😅 But this short, ungraded quiz is here to **help you reinforce key concepts you've just learned**.
+
+This quiz covers agent workflows and interactions - essential components for building effective AI agents.
+
+### Q1: What is the purpose of AgentWorkflow in LlamaIndex?
+
+<Question
+choices={[
+{
+text: "To run one or more agents with tools",
+explain: "Yes, the AgentWorkflow is the main way to quickly create a system with one or more agents.",
+correct: true
+},
+{
+text: "To create a single agent that can query your data without memory",
+explain: "No, the AgentWorkflow is more capable than that, the QueryEngine is for simple queries over your data.",
+},
+{
+text: "To automatically build tools for agents",
+explain: "The AgentWorkflow does not build tools, that is the job of the developer.",
+},
+{
+text: "To manage agent memory and state",
+explain: "Managing memory and state is not the primary purpose of AgentWorkflow.",
+}
+]}
+/>
+
+---
+
+### Q2: What object is used for keeping track of the state of the workflow?
+
+<Question
+choices={[
+{
+text: "State",
+explain: "State is not the correct object for workflow state management.",
+},
+{
+text: "Context",
+explain: "Context is the correct object used for keeping track of workflow state.",
+correct: true
+},
+{
+text: "WorkflowState",
+explain: "WorkflowState is not the correct object.",
+},
+{
+text: "Management",
+explain: "Management is not a valid object for workflow state.",
+}
+]}
+/>
+
+---
+
+### Q3: Which method should be used if you want an agent to remember previous interactions?
+
+<Question
+choices={[
+{
+text: "run(query_str)",
+explain: ".run(query_str) does not maintain conversation history.",
+},
+{
+text: "chat(query_str, ctx=ctx)",
+explain: "chat() is not a valid method on workflows.",
+},
+{
+text: "interact(query_str)",
+explain: "interact() is not a valid method for agent interactions.",
+},
+{
+text: "run(query_str, ctx=ctx)",
+explain: "By passing in and maintaining the context, we can maintain state!",
+correct: true
+}
+]}
+/>
+
+---
+
+### Q4: What is a key feature of Agentic RAG?
+
+<Question
+choices={[
+{
+text: "It can only use document-based tools, to answer questions in a RAG workflow",
+explain: "Agentic RAG can use different tools, including document-based tools.",
+},
+{
+text: "It automatically answers questions without tools, like a chatbot",
+explain: "Agentic RAG does use tools to answer questions.",
+},
+{
+text: "It can decide to use any tool to answer questions, including RAG tools",
+explain: "Agentic RAG has the flexibility to use different tools to answer questions.",
+correct: true
+},
+{
+text: "It only works with Function Calling Agents",
+explain: "Agentic RAG is not limited to Function Calling Agents.",
+}
+]}
+/>
+
+---
+
+Got it? Great! Now let's **do a brief recap of the unit!**
+
+
+## Conclusion
+
+# Conclusion
+
+Congratulations on finishing the `llama-index` module of this second Unit 🥳
+
+You’ve just mastered the fundamentals of `llama-index` and you’ve seen how to build your own agentic workflows!
+Now that you have skills in `llama-index`, you can start to create search engines that will solve tasks you're interested in.
+
+In the next module of the unit, you're going to learn **how to build Agents with LangGraph**.
+
+Finally, we would love **to hear what you think of the course and how we can improve it**.
+If you have some feedback then, please 👉 [fill this form](https://docs.google.com/forms/d/e/1FAIpQLSe9VaONn0eglax0uTwi29rIn4tM7H2sYmmybmG5jJNlE5v0xA/viewform?usp=dialog)
+
+### Keep Learning, and stay awesome 🤗

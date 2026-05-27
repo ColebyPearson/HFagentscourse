@@ -1,0 +1,705 @@
+# Bonus Unit 2. Agent Observability and Evaluation
+
+
+## Introduction
+
+# AI Agent Observability & Evaluation
+
+![Bonus Unit 2 Thumbnail](https://langfuse.com/images/cookbook/huggingface-agent-course/agent-observability-and-evaluation.png)
+
+Welcome to **Bonus Unit 2**! In this chapter, you'll explore advanced strategies for observing, evaluating, and ultimately improving the performance of your agents.
+
+---
+
+## 📚 When Should I Do This Bonus Unit?
+
+This bonus unit is perfect if you:
+- **Develop and Deploy AI Agents:** You want to ensure that your agents are performing reliably in production.
+- **Need Detailed Insights:** You're looking to diagnose issues, optimize performance, or understand the inner workings of your agent.
+- **Aim to Reduce Operational Overhead:** By monitoring agent costs, latency, and execution details, you can efficiently manage resources.
+- **Seek Continuous Improvement:** You’re interested in integrating both real-time user feedback and automated evaluation into your AI applications.
+
+In short, for everyone who wants to bring their agents in front of users!
+
+---
+
+## 🤓 What You’ll Learn
+
+In this unit, you'll learn:
+- **Instrument Your Agent:** Learn how to integrate observability tools via OpenTelemetry with the *smolagents* framework.
+- **Monitor Metrics:** Track performance indicators such as token usage (costs), latency, and error traces.
+- **Evaluate in Real-Time:** Understand techniques for live evaluation, including gathering user feedback and leveraging an LLM-as-a-judge.
+- **Offline Analysis:** Use benchmark datasets (e.g., GSM8K) to test and compare agent performance.
+
+---
+
+## 🚀 Ready to Get Started?
+
+In the next section, you'll learn the basics of Agent Observability and Evaluation. After that, its time to see it in action!
+
+
+## What is agent observability and evaluation?
+
+# AI Agent Observability and Evaluation
+
+## 🔎 What is Observability?
+
+Observability is about understanding what's happening inside your AI agent by looking at external signals like logs, metrics, and traces. For AI agents, this means tracking actions, tool usage, model calls, and responses to debug and improve agent performance.
+
+![Observability dashboard](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/langfuse-dashboard.png)
+
+## 🔭 Why Agent Observability Matters
+
+Without observability, AI agents are "black boxes." Observability tools make agents transparent, enabling you to:
+
+- Understand costs and accuracy trade-offs
+- Measure latency
+- Detect harmful language & prompt injection
+- Monitor user feedback
+
+In other words, it makes your demo agent ready for production!
+
+## 🔨 Observability Tools
+
+Common observability tools for AI agents include platforms like [Langfuse](https://langfuse.com) and [Arize](https://www.arize.com). These tools help collect detailed traces and offer dashboards to monitor metrics in real-time, making it easy to detect problems and optimize performance.
+
+Observability tools vary widely in their features and capabilities. Some tools are open source, benefiting from large communities that shape their roadmaps and extensive integrations. Additionally, certain tools specialize in specific aspects of LLMOps—such as observability, evaluations, or prompt management—while others are designed to cover the entire LLMOps workflow. We encourage you to explore the documentation of different options to pick a solution that works well for you.
+
+Many agent frameworks such as [smolagents](https://huggingface.co/docs/smolagents/v1.12.0/en/index) use the [OpenTelemetry](https://opentelemetry.io/docs/) standard to expose metadata to the observability tools. In addition to this, observability tools build custom instrumentations to allow for more flexibility in the fast moving world of LLMs. You should check the documentation of the tool you are using to see what is supported.
+
+## 🔬Traces and Spans
+
+Observability tools usually represent agent runs as traces and spans.
+
+- **Traces** represent a complete agent task from start to finish (like handling a user query).
+- **Spans** are individual steps within the trace (like calling a language model or retrieving data).
+
+![Example of a smolagent trace in Langfuse](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/trace-tree.png)
+
+## 📊 Key Metrics to Monitor
+
+Here are some of the most common metrics that observability tools monitor:
+
+**Latency:** How quickly does the agent respond? Long waiting times negatively impact user experience. You should measure latency for tasks and individual steps by tracing agent runs. For example, an agent that takes 20 seconds for all model calls could be accelerated by using a faster model or by running model calls in parallel.
+
+**Costs:** What’s the expense per agent run? AI agents rely on LLM calls billed per token or external APIs. Frequent tool usage or multiple prompts can rapidly increase costs. For instance, if an agent calls an LLM five times for marginal quality improvement, you must assess if the cost is justified or if you could reduce the number of calls or use a cheaper model. Real-time monitoring can also help identify unexpected spikes (e.g., bugs causing excessive API loops).
+
+**Request Errors:** How many requests did the agent fail? This can include API errors or failed tool calls. To make your agent more robust against these in production, you can then set up fallbacks or retries. E.g. if LLM provider A is down, you switch to LLM provider B as backup.
+
+**User Feedback:** Implementing direct user evaluations provide valuable insights. This can include explicit ratings (👍thumbs-up/👎down, ⭐1-5 stars) or textual comments. Consistent negative feedback should alert you as this is a sign that the agent is not working as expected. 
+
+**Implicit User Feedback:** User behaviors provide indirect feedback even without explicit ratings. This can include immediate question rephrasing, repeated queries or clicking a retry button. E.g. if you see that users repeatedly ask the same question, this is a sign that the agent is not working as expected.
+
+**Accuracy:** How frequently does the agent produce correct or desirable outputs? Accuracy definitions vary (e.g., problem-solving correctness, information retrieval accuracy, user satisfaction). The first step is to define what success looks like for your agent. You can track accuracy via automated checks, evaluation scores, or task completion labels. For example, marking traces as "succeeded" or "failed". 
+
+**Automated Evaluation Metrics:** You can also set up automated evals. For instance, you can use an LLM to score the output of the agent e.g. if it is helpful, accurate, or not. There are also several open source libraries that help you to score different aspects of the agent. E.g. [RAGAS](https://docs.ragas.io/) for RAG agents or [LLM Guard](https://llm-guard.com/) to detect harmful language or prompt injection. 
+
+In practice, a combination of these metrics gives the best coverage of an AI agent’s health. In this chapters [example notebook](https://colab.research.google.com/#fileId=https://huggingface.co/agents-course/notebooks/blob/main/bonus-unit2/monitoring-and-evaluating-agents.ipynb), we'll show you how these metrics looks in real examples but first, we'll learn how a typical evaluation workflow looks like.
+
+## 👍 Evaluating AI Agents
+
+Observability gives us metrics, but evaluation is the process of analyzing that data (and performing tests) to determine how well an AI agent is performing and how it can be improved. In other words, once you have those traces and metrics, how do you use them to judge the agent and make decisions? 
+
+Regular evaluation is important because AI agents are often non-deterministic and can evolve (through updates or drifting model behavior) – without evaluation, you wouldn’t know if your “smart agent” is actually doing its job well or if it’s regressed.
+
+There are two categories of evaluations for AI agents: **online evaluation** and **offline evaluation**. Both are valuable, and they complement each other. We usually begin with offline evaluation, as this is the minimum necessary step before deploying any agent.
+
+### 🥷 Offline Evaluation
+
+![Dataset items in Langfuse](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/example-dataset.png)
+
+This involves evaluating the agent in a controlled setting, typically using test datasets, not live user queries. You use curated datasets where you know what the expected output or correct behavior is, and then run your agent on those. 
+
+For instance, if you built a math word-problem agent, you might have a [test dataset](https://huggingface.co/datasets/gsm8k) of 100 problems with known answers. Offline evaluation is often done during development (and can be part of CI/CD pipelines) to check improvements or guard against regressions. The benefit is that it’s **repeatable and you can get clear accuracy metrics since you have ground truth**. You might also simulate user queries and measure the agent’s responses against ideal answers or use automated metrics as described above. 
+
+The key challenge with offline eval is ensuring your test dataset is comprehensive and stays relevant – the agent might perform well on a fixed test set but encounter very different queries in production. Therefore, you should keep test sets updated with new edge cases and examples that reflect real-world scenarios​. A mix of small “smoke test” cases and larger evaluation sets is useful: small sets for quick checks and larger ones for broader performance metrics​.
+
+### 🔄 Online Evaluation 
+
+This refers to evaluating the agent in a live, real-world environment, i.e. during actual usage in production. Online evaluation involves monitoring the agent’s performance on real user interactions and analyzing outcomes continuously. 
+
+For example, you might track success rates, user satisfaction scores, or other metrics on live traffic. The advantage of online evaluation is that it **captures things you might not anticipate in a lab setting** – you can observe model drift over time (if the agent’s effectiveness degrades as input patterns shift) and catch unexpected queries or situations that weren’t in your test data​. It provides a true picture of how the agent behaves in the wild. 
+
+Online evaluation often involves collecting implicit and explicit user feedback, as discussed, and possibly running shadow tests or A/B tests (where a new version of the agent runs in parallel to compare against the old). The challenge is that it can be tricky to get reliable labels or scores for live interactions – you might rely on user feedback or downstream metrics (like did the user click the result). 
+
+### 🤝 Combining the two
+
+In practice, successful AI agent evaluation blends **online** and **offline** methods​. You might run regular offline benchmarks to quantitatively score your agent on defined tasks and continuously monitor live usage to catch things the benchmarks miss. For example, offline tests can catch if a code-generation agent’s success rate on a known set of problems is improving, while online monitoring might alert you that users have started asking a new category of question that the agent struggles with. Combining both gives a more robust picture. 
+
+In fact, many teams adopt a loop: _offline evaluation → deploy new agent version → monitor online metrics and collect new failure examples → add those examples to offline test set → iterate_. This way, evaluation is continuous and ever-improving.
+
+## 🧑‍💻 Lets see how this works in practice
+
+In the next section, we'll see examples of how we can use observability tools to monitor and evaluate our agent.
+
+
+## Monitoring and evaluating agents
+
+<CourseFloatingBanner chapter={2}
+  classNames="absolute z-10 right-0 top-0"
+  notebooks={[
+    {label: "Google Colab", value: "https://colab.research.google.com/#fileId=https%3A//huggingface.co/agents-course/notebooks/blob/main/bonus-unit2/monitoring-and-evaluating-agents.ipynb"},
+]} />
+
+# Bonus Unit 2: Observability and Evaluation of Agents
+
+> [!TIP]
+> You can follow the code in <a href="https://colab.research.google.com/#fileId=https%3A//huggingface.co/agents-course/notebooks/blob/main/bonus-unit2/monitoring-and-evaluating-agents.ipynb" target="_blank">this notebook</a> that you can run using Google Colab.
+
+In this notebook, we will learn how to **monitor the internal steps (traces) of our AI agent** and **evaluate its performance** using open-source observability tools.
+
+The ability to observe and evaluate an agent’s behavior is essential for:
+- Debugging issues when tasks fail or produce suboptimal results
+- Monitoring costs and performance in real-time
+- Improving reliability and safety through continuous feedback
+
+## Exercise Prerequisites 🏗️
+
+Before running this notebook, please be sure you have:
+
+🔲 📚  **Studied** [Introduction to Agents](https://huggingface.co/learn/agents-course/unit1/introduction)
+
+🔲 📚  **Studied** [The smolagents framework](https://huggingface.co/learn/agents-course/unit2/smolagents/introduction)
+
+## Step 0: Install the Required Libraries
+
+We will need a few libraries that allow us to run, monitor, and evaluate our agents:
+
+```python
+%pip install langfuse 'smolagents[telemetry]' openinference-instrumentation-smolagents datasets 'smolagents[gradio]' gradio --upgrade
+```
+
+## Step 1: Instrument Your Agent
+
+In this notebook, we will use [Langfuse](https://langfuse.com/) as our observability tool, but you can use **any other OpenTelemetry-compatible service**. The code below shows how to set environment variables for Langfuse (or any OTel endpoint) and how to instrument your smolagent.
+
+**Note:** If you are using LlamaIndex or LangGraph, you can find documentation on instrumenting them [here](https://langfuse.com/docs/integrations/llama-index/workflows) and [here](https://langfuse.com/docs/integrations/langchain/example-python-langgraph). 
+
+First, let's set up the Langfuse credentials as environment variables. Get your Langfuse API keys by signing up for [Langfuse Cloud](https://cloud.langfuse.com) or [self-hosting Langfuse](https://langfuse.com/self-hosting).
+
+```python
+
+# Get keys for your project from the project settings page: https://cloud.langfuse.com
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-..." 
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-..." 
+os.environ["LANGFUSE_HOST"] = "https://cloud.langfuse.com" # 🇪🇺 EU region
+# os.environ["LANGFUSE_HOST"] = "https://us.cloud.langfuse.com" # 🇺🇸 US region
+```
+We also need to configure our Hugging Face token for inference calls.
+
+```python
+# Set your Hugging Face and other tokens/secrets as environment variable
+os.environ["HF_TOKEN"] = "hf_..." 
+```
+
+With the environment variables set, we can now initialize the Langfuse client. `get_client()` initializes the Langfuse client using the credentials provided in the environment variables.
+
+```python
+from langfuse import get_client
+ 
+langfuse = get_client()
+ 
+# Verify connection
+if langfuse.auth_check():
+    print("Langfuse client is authenticated and ready!")
+else:
+    print("Authentication failed. Please check your credentials and host.")
+```
+
+Next, we can set up the `SmolagentsInstrumentor()` to instrument our smolagent and send traces to Langfuse.
+
+```python
+from openinference.instrumentation.smolagents import SmolagentsInstrumentor
+ 
+SmolagentsInstrumentor().instrument()
+```
+
+## Step 2: Test Your Instrumentation
+
+Here is a simple CodeAgent from smolagents that calculates `1+1`. We run it to confirm that the instrumentation is working correctly. If everything is set up correctly, you will see logs/spans in your observability dashboard.
+
+```python
+from smolagents import InferenceClientModel, CodeAgent
+
+# Create a simple agent to test instrumentation
+agent = CodeAgent(
+    tools=[],
+    model=InferenceClientModel()
+)
+
+agent.run("1+1=")
+```
+
+Check your [Langfuse Traces Dashboard](https://cloud.langfuse.com) (or your chosen observability tool) to confirm that the spans and logs have been recorded.
+
+Example screenshot from Langfuse:
+
+![Example trace in Langfuse](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/first-example-trace.png)
+
+_[Link to the trace](https://cloud.langfuse.com/project/cloramnkj0002jz088vzn1ja4/traces/1b94d6888258e0998329cdb72a371155?timestamp=2025-03-10T11%3A59%3A41.743Z)_
+
+## Step 3: Observe and Evaluate a More Complex Agent
+
+Now that you have confirmed your instrumentation works, let's try a more complex query so we can see how advanced metrics (token usage, latency, costs, etc.) are tracked.
+
+```python
+from smolagents import (CodeAgent, DuckDuckGoSearchTool, InferenceClientModel)
+
+search_tool = DuckDuckGoSearchTool()
+agent = CodeAgent(tools=[search_tool], model=InferenceClientModel())
+
+agent.run("How many Rubik's Cubes could you fit inside the Notre Dame Cathedral?")
+```
+
+### Trace Structure
+
+Most observability tools record a **trace** that contains **spans**, which represent each step of your agent’s logic. Here, the trace contains the overall agent run and sub-spans for:
+- The tool calls (DuckDuckGoSearchTool)
+- The LLM calls (InferenceClientModel)
+
+You can inspect these to see precisely where time is spent, how many tokens are used, and so on:
+
+![Trace tree in Langfuse](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/trace-tree.png)
+
+_[Link to the trace](https://cloud.langfuse.com/project/cloramnkj0002jz088vzn1ja4/traces/1ac33b89ffd5e75d4265b62900c348ed?timestamp=2025-03-07T13%3A45%3A09.149Z&display=preview)_
+
+## Online Evaluation
+
+In the previous section, we learned about the difference between online and offline evaluation. Now, we will see how to monitor your agent in production and evaluate it live.
+
+### Common Metrics to Track in Production
+
+1. **Costs** — The smolagents instrumentation captures token usage, which you can transform into approximate costs by assigning a price per token.
+2. **Latency** — Observe the time it takes to complete each step, or the entire run.
+3. **User Feedback** — Users can provide direct feedback (thumbs up/down) to help refine or correct the agent.
+4. **LLM-as-a-Judge** — Use a separate LLM to evaluate your agent’s output in near real-time (e.g., checking for toxicity or correctness).
+
+Below, we show examples of these metrics.
+
+#### 1. Costs
+
+Below is a screenshot showing usage for `Qwen2.5-Coder-32B-Instruct` calls. This is useful to see costly steps and optimize your agent. 
+
+![Costs](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/smolagents-costs.png)
+
+_[Link to the trace](https://cloud.langfuse.com/project/cloramnkj0002jz088vzn1ja4/traces/1ac33b89ffd5e75d4265b62900c348ed?timestamp=2025-03-07T13%3A45%3A09.149Z&display=preview)_
+
+#### 2. Latency
+
+We can also see how long it took to complete each step. In the example below, the entire conversation took 32 seconds, which you can break down by step. This helps you identify bottlenecks and optimize your agent.
+
+![Latency](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/smolagents-latency.png)
+
+_[Link to the trace](https://cloud.langfuse.com/project/cloramnkj0002jz088vzn1ja4/traces/1ac33b89ffd5e75d4265b62900c348ed?timestamp=2025-03-07T13%3A45%3A09.149Z&display=preview)_
+
+#### 3. Additional Attributes
+
+You may also pass additional attributes to your spans. These can include `user_id`, `tags`, `session_id`, and custom metadata. Enriching traces with these details is important for analysis, debugging, and monitoring of your application’s behavior across different users or sessions.
+
+```python
+from smolagents import (CodeAgent, DuckDuckGoSearchTool, InferenceClientModel)
+
+search_tool = DuckDuckGoSearchTool()
+agent = CodeAgent(
+    tools=[search_tool],
+    model=InferenceClientModel()
+)
+
+with langfuse.start_as_current_span(
+    name="Smolagent-Trace",
+    ) as span:
+    
+    # Run your application here
+    response = agent.run("What is the capital of Germany?")
+ 
+    # Pass additional attributes to the span
+    span.update_trace(
+        input="What is the capital of Germany?",
+        output=response,
+        user_id="smolagent-user-123",
+        session_id="smolagent-session-123456789",
+        tags=["city-question", "testing-agents"],
+        metadata={"email": "user@langfuse.com"},
+        )
+ 
+# Flush events in short-lived applications
+langfuse.flush()
+```
+
+![Enhancing agent runs with additional metrics](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/smolagents-attributes.png)
+
+#### 4. User Feedback
+
+If your agent is embedded into a user interface, you can record direct user feedback (like a thumbs-up/down in a chat UI). Below is an example using [Gradio](https://gradio.app/) to embed a chat with a simple feedback mechanism.
+
+In the code snippet below, when a user sends a chat message, we capture the trace in Langfuse. If the user likes/dislikes the last answer, we attach a score to the trace.
+
+```python
+
+from smolagents import (CodeAgent, InferenceClientModel)
+from langfuse import get_client
+
+langfuse = get_client()
+
+model = InferenceClientModel()
+agent = CodeAgent(tools=[], model=model, add_base_tools=True)
+
+trace_id = None
+
+def respond(prompt, history):
+    with langfuse.start_as_current_span(
+        name="Smolagent-Trace"):
+        
+        # Run your application here
+        output = agent.run(prompt)
+
+        global trace_id
+        trace_id = langfuse.get_current_trace_id()
+
+    history.append({"role": "assistant", "content": str(output)})
+    return history
+
+def handle_like(data: gr.LikeData):
+    # For demonstration, we map user feedback to a 1 (like) or 0 (dislike)
+    if data.liked:
+        langfuse.create_score(
+            value=1,
+            name="user-feedback",
+            trace_id=trace_id
+        )
+    else:
+        langfuse.create_score(
+            value=0,
+            name="user-feedback",
+            trace_id=trace_id
+        )
+
+with gr.Blocks() as demo:
+    chatbot = gr.Chatbot(label="Chat", type="messages")
+    prompt_box = gr.Textbox(placeholder="Type your message...", label="Your message")
+
+    # When the user presses 'Enter' on the prompt, we run 'respond'
+    prompt_box.submit(
+        fn=respond,
+        inputs=[prompt_box, chatbot],
+        outputs=chatbot
+    )
+
+    # When the user clicks a 'like' button on a message, we run 'handle_like'
+    chatbot.like(handle_like, None, None)
+
+demo.launch()
+```
+
+User feedback is then captured in your observability tool:
+
+![User feedback is being captured in Langfuse](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/user-feedback-gradio.png)
+
+#### 5. LLM-as-a-Judge
+
+LLM-as-a-Judge is another way to automatically evaluate your agent's output. You can set up a separate LLM call to gauge the output’s correctness, toxicity, style, or any other criteria you care about.
+
+**Workflow**:
+1. You define an **Evaluation Template**, e.g., "Check if the text is toxic."
+2. Each time your agent generates output, you pass that output to your "judge" LLM with the template.
+3. The judge LLM responds with a rating or label that you log to your observability tool.
+
+Example from Langfuse:
+
+![LLM-as-a-Judge Evaluation Template](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/evaluator-template.png)
+![LLM-as-a-Judge Evaluator](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/evaluator.png)
+
+```python
+# Example: Checking if the agent’s output is toxic or not.
+from smolagents import (CodeAgent, DuckDuckGoSearchTool, InferenceClientModel)
+
+search_tool = DuckDuckGoSearchTool()
+agent = CodeAgent(tools=[search_tool], model=InferenceClientModel())
+
+agent.run("Can eating carrots improve your vision?")
+```
+
+You can see that the answer of this example is judged as "not toxic".
+
+![LLM-as-a-Judge Evaluation Score](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/llm-as-a-judge-score.png)
+
+#### 6. Observability Metrics Overview
+
+All of these metrics can be visualized together in dashboards. This enables you to quickly see how your agent performs across many sessions and helps you to track quality metrics over time.
+
+![Observability metrics overview](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/langfuse-dashboard.png)
+
+## Offline Evaluation
+
+Online evaluation is essential for live feedback, but you also need **offline evaluation**—systematic checks before or during development. This helps maintain quality and reliability before rolling changes into production.
+
+### Dataset Evaluation
+
+In offline evaluation, you typically:
+1. Have a benchmark dataset (with prompt and expected output pairs)
+2. Run your agent on that dataset
+3. Compare outputs to the expected results or use an additional scoring mechanism
+
+Below, we demonstrate this approach with the [GSM8K dataset](https://huggingface.co/datasets/openai/gsm8k), which contains math questions and solutions.
+
+```python
+
+from datasets import load_dataset
+
+# Fetch GSM8K from Hugging Face
+dataset = load_dataset("openai/gsm8k", 'main', split='train')
+df = pd.DataFrame(dataset)
+print("First few rows of GSM8K dataset:")
+print(df.head())
+```
+
+Next, we create a dataset entity in Langfuse to track the runs. Then, we add each item from the dataset to the system. (If you’re not using Langfuse, you might simply store these in your own database or local file for analysis.)
+
+```python
+from langfuse import get_client
+langfuse = get_client()
+
+langfuse_dataset_name = "gsm8k_dataset_huggingface"
+
+# Create a dataset in Langfuse
+langfuse.create_dataset(
+    name=langfuse_dataset_name,
+    description="GSM8K benchmark dataset uploaded from Huggingface",
+    metadata={
+        "date": "2025-03-10", 
+        "type": "benchmark"
+    }
+)
+```
+
+```python
+for idx, row in df.iterrows():
+    langfuse.create_dataset_item(
+        dataset_name=langfuse_dataset_name,
+        input={"text": row["question"]},
+        expected_output={"text": row["answer"]},
+        metadata={"source_index": idx}
+    )
+    if idx >= 9: # Upload only the first 10 items for demonstration
+        break
+```
+
+![Dataset items in Langfuse](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/example-dataset.png)
+
+#### Running the Agent on the Dataset
+
+We define a helper function `run_smolagent()` that:
+1. Starts a Langfuse span
+2. Runs our agent on the prompt
+3. Records the trace ID in Langfuse
+
+Then, we loop over each dataset item, run the agent, and link the trace to the dataset item. We can also attach a quick evaluation score if desired.
+
+```python
+from opentelemetry.trace import format_trace_id
+from smolagents import (CodeAgent, InferenceClientModel, LiteLLMModel)
+from langfuse import get_client
+ 
+langfuse = get_client()
+
+# Example: using InferenceClientModel or LiteLLMModel to access openai, anthropic, gemini, etc. models:
+model = InferenceClientModel()
+
+agent = CodeAgent(
+    tools=[],
+    model=model,
+    add_base_tools=True
+)
+
+dataset_name = "gsm8k_dataset_huggingface"
+current_run_name = "smolagent-notebook-run-01" # Identifies this specific evaluation run
+ 
+# Assume 'run_smolagent' is your instrumented application function
+def run_smolagent(question):
+    with langfuse.start_as_current_generation(name="qna-llm-call") as generation:
+        # Simulate LLM call
+        result = agent.run(question)
+ 
+        # Update the trace with the input and output
+        generation.update_trace(
+            input= question,
+            output=result,
+        )
+ 
+        return result
+ 
+dataset = langfuse.get_dataset(name=dataset_name) # Fetch your pre-populated dataset
+ 
+for item in dataset.items:
+ 
+    # Use the item.run() context manager
+    with item.run(
+        run_name=current_run_name,
+        run_metadata={"model_provider": "Hugging Face", "temperature_setting": 0.7},
+        run_description="Evaluation run for GSM8K dataset"
+    ) as root_span: # root_span is the root span of the new trace for this item and run.
+        # All subsequent langfuse operations within this block are part of this trace.
+ 
+        # Call your application logic
+        generated_answer = run_smolagent(question=item.input["text"])
+ 
+        print(item.input)
+```
+
+You can repeat this process with different:
+- Models (OpenAI GPT, local LLM, etc.)
+- Tools (search vs. no search)
+- Prompts (different system messages)
+
+Then compare them side-by-side in your observability tool:
+
+![Dataset run overview](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/dataset_runs.png)
+![Dataset run comparison](https://huggingface.co/datasets/agents-course/course-images/resolve/main/en/bonus-unit2/dataset-run-comparison.png)
+
+## Final Thoughts
+
+In this notebook, we covered how to:
+1. **Set up Observability** using smolagents + OpenTelemetry exporters
+2. **Check Instrumentation** by running a simple agent
+3. **Capture Detailed Metrics** (cost, latency, etc.) through an observability tools
+4. **Collect User Feedback** via a Gradio interface
+5. **Use LLM-as-a-Judge** to automatically evaluate outputs
+6. **Perform Offline Evaluation** with a benchmark dataset
+
+🤗 Happy coding!
+
+
+## Quiz
+
+# Quiz: Evaluating AI Agents
+
+Let's assess your understanding of the agent tracing and evaluation concepts covered in this bonus unit.
+
+This quiz is optional and ungraded.
+
+### Q1: What does observability in AI agents primarily refer to?
+Which statement accurately describes the purpose of observability for AI agents?
+
+<Question
+choices={[ 
+  {
+    text: "It involves tracking internal operations through logs, metrics, and spans to understand agent behavior.",
+    explain: "Correct! Observability means using logs, metrics, and spans to shed light on the inner workings of the agent.",
+    correct: true
+  },
+  {
+    text: "It is solely focused on reducing the financial cost of running the agent.",
+    explain: "Observability covers cost but is not limited to it."
+  },
+  {
+    text: "It refers only to the external appearance and UI of the agent.",
+    explain: "Observability is about the internal processes, not the UI."
+  },
+  {
+    text: "It is concerned with coding style and code aesthetics only.",
+    explain: "Code style is unrelated to observability in this context."
+  }
+]}
+/>
+
+### Q2: Which of the following is NOT a common metric monitored in agent observability?
+Select the metric that does not typically fall under the observability umbrella.
+
+<Question
+choices={[ 
+  {
+    text: "Latency",
+    explain: "Latency is commonly tracked to assess agent responsiveness."
+  },
+  {
+    text: "Cost per Agent Run",
+    explain: "Monitoring cost is a key aspect of observability."
+  },
+  {
+    text: "User Feedback and Ratings",
+    explain: "User feedback is crucial for evaluating agent performance."
+  },
+  {
+    text: "Lines of Code of the Agent",
+    explain: "The number of lines of code is not a typical observability metric.",
+    correct: true
+  }
+]}
+/>
+
+### Q3: What best describes offline evaluation of an AI agent?
+Determine the statement that correctly captures the essence of offline evaluation.
+
+<Question
+choices={[ 
+  {
+    text: "Evaluating the agent using real user interactions in a live environment.",
+    explain: "This describes online evaluation rather than offline."
+  },
+  {
+    text: "Assessing agent performance using curated datasets with known ground truth.",
+    explain: "Correct! Offline evaluation uses test datasets to gauge performance against known answers.",
+    correct: true
+  },
+  {
+    text: "Monitoring the agent's internal logs in real-time.",
+    explain: "This is more related to observability rather than evaluation."
+  },
+  {
+    text: "Running the agent without any evaluation metrics.",
+    explain: "This approach does not provide meaningful insights."
+  }
+]}
+/>
+
+### Q4: Which advantage does online evaluation of agents offer?
+Pick the statement that best reflects the benefit of online evaluation.
+
+<Question
+choices={[ 
+  {
+    text: "It provides controlled testing scenarios using pre-defined datasets.",
+    explain: "Controlled testing is a benefit of offline evaluation, not online."
+  },
+  {
+    text: "It captures live user interactions and real-world performance data.",
+    explain: "Correct! Online evaluation offers insights by monitoring the agent in a live setting.",
+    correct: true
+  },
+  {
+    text: "It eliminates the need for any offline testing and benchmarks.",
+    explain: "Both offline and online evaluations are important and complementary."
+  },
+  {
+    text: "It solely focuses on reducing the computational cost of the agent.",
+    explain: "Cost monitoring is part of observability, not the primary advantage of online evaluation."
+  }
+]}
+/>
+
+### Q5: What role does OpenTelemetry play in AI agent observability and evaluation?
+Which statement best describes the role of OpenTelemetry in monitoring AI agents?
+
+<Question
+choices={[ 
+  {
+    text: "It provides a standardized framework to instrument code, enabling the collection of traces, metrics, and logs for observability.",
+    explain: "Correct! OpenTelemetry standardizes instrumentation for telemetry data, which is crucial for monitoring and diagnosing agent behavior.",
+    correct: true
+  },
+  {
+    text: "It acts as a replacement for manual debugging by automatically fixing code issues.",
+    explain: "Incorrect. OpenTelemetry is used for gathering telemetry data, not for debugging code issues."
+  },
+  {
+    text: "It primarily serves as a database for storing historical logs without real-time capabilities.",
+    explain: "Incorrect. OpenTelemetry focuses on real-time telemetry data collection and exporting data to analysis tools."
+  },
+  {
+    text: "It is used to optimize the computational performance of the AI agent by automatically tuning model parameters.",
+    explain: "Incorrect. OpenTelemetry is centered on observability rather than performance tuning."
+  }
+]}
+/>
+
+Congratulations on completing this quiz! 🎉 If you missed any questions, consider reviewing the content of this bonus unit for a deeper understanding. If you did well, you're ready to explore more advanced topics in agent observability and evaluation!

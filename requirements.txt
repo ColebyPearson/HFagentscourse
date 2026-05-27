@@ -1,0 +1,33 @@
+# Frameworks the course teaches
+smolagents>=1.10.0
+llama-index>=0.11.0
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+
+# Core LLM / data
+transformers>=4.45.0
+huggingface_hub>=0.24.0
+datasets>=2.20.0
+openai>=1.0.0                      # HF Inference Providers uses OpenAI-compat /v1
+anthropic>=0.40.0                  # optional, for testing across providers
+
+# Fine-tuning (Bonus Unit 1 — function-calling)
+trl>=1.0.0
+peft>=0.13.0
+accelerate>=0.34.0
+bitsandbytes>=0.43.0
+torch>=2.4.0
+
+# Demos / UI
+gradio>=5.0.0
+
+# Observability (Bonus Unit 2)
+arize-phoenix>=4.0.0               # tracing + eval
+opentelemetry-sdk>=1.27.0
+opentelemetry-exporter-otlp>=1.27.0
+
+# Utilities
+pydantic>=2.0.0
+PyYAML>=6.0
+duckduckgo-search>=6.0.0           # common smolagents tool example

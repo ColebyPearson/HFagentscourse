@@ -1,0 +1,30 @@
+# Upstream source clone (used to build notebooklm/)
+_source/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Training / build artifacts
+runs/
+outputs/
+checkpoints/
+wandb/
+*.log
+
+# Env / secrets
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Claude Code local discovery (skill / plugin junctions live in unit_*/)
+.claude/
