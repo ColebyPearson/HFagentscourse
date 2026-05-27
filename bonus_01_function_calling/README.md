@@ -58,6 +58,22 @@ python train\infer.py
 ## Status
 
 - [x] Read all chapters (notebooklm + per-section MDX)
-- [ ] Run `train/train_fc.py` (currently in flight)
-- [ ] Verify `VoicesColeby/smollm2-1.7b-fc-lora` on the Hub
-- [ ] Quick smoke test via `train/infer.py`
+- [x] Ran `train/train_fc.py` — 200 steps, ~9 min on RTX 5060 Ti.
+- [x] Verified `VoicesColeby/smollm2-1.7b-fc-lora` on the Hub (36 MB adapter).
+- [x] Smoke-tested via `train/infer.py` — emits the expected
+      `<think>...</think><tool_call>{"name": ..., "arguments": {...}}</tool_call>`
+      envelope.
+
+## Training summary
+
+| Step | Loss | Mean-token-accuracy |
+|------|------|---------------------|
+| 10   | 1.27 | 0.72 |
+| 50   | 0.42 | 0.88 |
+| 100  | 0.39 | 0.88 |
+| 150  | 0.40 | 0.88 |
+| 200  | 0.33 | 0.90 |
+
+Clean convergence — the LoRA adapter has clearly internalized the
+Hermes function-calling-thinking schema (`<think>` reasoning →
+`<tool_call>` JSON envelope).
