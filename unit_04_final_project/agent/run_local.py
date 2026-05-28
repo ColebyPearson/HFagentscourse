@@ -97,13 +97,13 @@ def build_agent() -> CodeAgent:
             FinalAnswerTool(),
         ],
         additional_authorized_imports=ALLOWED_IMPORTS,
-        max_steps=12,
+        max_steps=8,
         verbosity_level=1,
         name="GAIAAgent",
     )
 
 
-def run_one(agent: CodeAgent, q: dict[str, Any]) -> str:
+def _build_prompt(q: dict[str, Any]) -> str:
     task_id = q["task_id"]
     question = q["question"]
     has_file = q.get("file_name") not in (None, "")
@@ -114,7 +114,26 @@ def run_one(agent: CodeAgent, q: dict[str, Any]) -> str:
             f"download_task_file({task_id!r}); if it reports no file is "
             f"mapped, answer from the text if you can, else give your best guess.)"
         )
-    return str(agent.run(prompt)).strip()
+    return prompt
+
+
+def run_one(agent: CodeAgent, q: dict[str, Any], cooldown: float = 45.0) -> str:
+    """Run one question. HF Inference Providers' free tier throttles bursts
+    (the CodeAgent fires many calls per question); on a 402/429 we cool down
+    and retry the whole question once with a fresh agent."""
+    prompt = _build_prompt(q)
+    try:
+        return str(agent.run(prompt)).strip()
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc)
+        if "402" in msg or "429" in msg or "rate" in msg.lower():
+            print(f"   …throttled ({'402' if '402' in msg else '429'}); cooling down {cooldown:.0f}s and retrying once")
+            time.sleep(cooldown)
+            try:
+                return str(build_agent().run(prompt)).strip()
+            except Exception as exc2:  # noqa: BLE001
+                return f"AGENT_ERROR: {exc2}"
+        return f"AGENT_ERROR: {exc}"
 
 
 def main() -> None:
@@ -123,11 +142,27 @@ def main() -> None:
     if "--only" in sys.argv:
         only = int(sys.argv[sys.argv.index("--only") + 1])
 
+    resume = "--resume" in sys.argv
+    gap = 15.0  # seconds between questions to stay under the burst-rate throttle
+    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gaia_run_local.json")
+
     print("== fetching questions ==")
     r = requests.get(QUESTIONS_URL, timeout=30)
     r.raise_for_status()
     questions = r.json()
     print(f"   got {len(questions)} questions")
+
+    # Resume: keep prior good (non-error, non-empty) answers so we don't
+    # re-burn quota on questions that already succeeded.
+    prior: dict[str, dict] = {}
+    if resume and os.path.exists(out):
+        with open(out, "r", encoding="utf-8") as f:
+            for t in json.load(f).get("transcript", []):
+                prior[t["task_id"]] = t
+        good = sum(1 for t in prior.values()
+                   if t.get("answer") and not t["answer"].startswith("AGENT_ERROR")
+                   and not t.get("skipped"))
+        print(f"   resume: {good} prior good answers retained")
 
     print("\n== building agent ==")
     agent = build_agent()
@@ -140,36 +175,45 @@ def main() -> None:
         has_file = q.get("file_name") not in (None, "")
 
         if has_file and not include_files:
-            # Unanswerable via this API (files 404). Record an empty answer
-            # so the task_id is still present in the submission payload.
             print(f"\n[{i:2d}/{len(questions)}] {tid}  SKIP (file question, not served by API)")
             answers.append({"task_id": tid, "submitted_answer": ""})
             transcript.append({"task_id": tid, "question": prompt, "answer": "",
                                "seconds": 0.0, "had_file": True, "skipped": True})
             continue
 
+        # Resume: reuse a prior good answer.
+        p = prior.get(tid)
+        if (resume and p and p.get("answer")
+                and not p["answer"].startswith("AGENT_ERROR") and not p.get("skipped")):
+            print(f"\n[{i:2d}/{len(questions)}] {tid}  REUSE -> {p['answer'][:80]!r}")
+            transcript.append(p)
+            answers.append({"task_id": tid, "submitted_answer": p["answer"]})
+            continue
+
         if only is not None and attempted >= only:
             break
+        if attempted > 0:
+            time.sleep(gap)  # throttle between live questions
         attempted += 1
 
         print(f"\n[{i:2d}/{len(questions)}] {tid} (file={has_file})")
         print(f"  Q: {prompt[:200]}")
         t0 = time.time()
-        try:
-            ans = run_one(agent, q)
-        except Exception as exc:  # noqa: BLE001
-            ans = f"AGENT_ERROR: {exc}"
+        ans = run_one(agent, q)
         dt = time.time() - t0
         print(f"  A ({dt:.1f}s): {ans[:300]}")
         answers.append({"task_id": tid, "submitted_answer": ans})
         transcript.append({"task_id": tid, "question": prompt, "answer": ans,
                            "seconds": round(dt, 1), "had_file": has_file,
                            "skipped": False})
+        # Checkpoint after every question so a mid-run throttle doesn't lose progress.
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump({"answers": answers, "transcript": transcript}, f, indent=2)
 
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gaia_run_local.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump({"answers": answers, "transcript": transcript}, f, indent=2)
-    print(f"\n== Done. Wrote {out} ({len(answers)} answers). NOT POSTed. ==")
+    nonerr = sum(1 for t in transcript if t["answer"] and not t["answer"].startswith("AGENT_ERROR") and not t.get("skipped"))
+    print(f"\n== Done. Wrote {out}. {nonerr} concrete answers, NOT POSTed. ==")
 
 
 if __name__ == "__main__":
