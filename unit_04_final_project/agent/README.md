@@ -6,6 +6,7 @@ colorTo: red
 sdk: gradio
 sdk_version: 5.0.0
 app_file: app.py
+python_version: "3.12"
 hf_oauth: true
 hf_oauth_expiration_minutes: 480
 pinned: false
