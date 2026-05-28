@@ -62,7 +62,7 @@ def download_task_file(task_id: str) -> str:
     try:
         r = requests.get(f"{FILE_URL}/{task_id}", timeout=30)
         if r.status_code == 404:
-            return "No file attached to this task."
+            return "No file is mapped for this task on the scoring server; answer from the question text alone if possible."
         r.raise_for_status()
     except Exception as exc:  # noqa: BLE001
         return f"Download failed: {exc}"
@@ -74,17 +74,21 @@ def download_task_file(task_id: str) -> str:
 
 # ----- Agent factory --------------------------------------------------------
 
-SYSTEM_HINT = (
-    "You are a careful, persistent GAIA benchmark agent. For each question:\n"
-    "  1. Plan: identify exactly what fact / list / number is being asked.\n"
-    "  2. Act:  use the tools (web search, visit_webpage, python_interpreter,\n"
-    "          download_task_file) to gather and verify the answer.\n"
-    "  3. Answer: call final_answer(...) with the SHORT, EXACT-MATCH answer\n"
-    "          - just the value, no preamble.\n"
-    "          - no 'FINAL ANSWER:' prefix.\n"
-    "          - numbers as digits, no units unless asked; lists\n"
-    "            comma-separated; dates as the question requests.\n"
-)
+# NOTE: In smolagents, CodeAgent(description=...) is sub-agent metadata and
+# is NOT injected as a system prompt. To reliably steer the model we PREPEND
+# this guidance to every task string in run_one().
+GUIDANCE = """You are a GAIA benchmark agent. Your answer is graded by EXACT STRING MATCH against a short ground-truth, so formatting is critical.
+
+RULES:
+- Your final_answer MUST be the bare value only — a name, number, word, or comma-separated list. NEVER a sentence, never an explanation, never "I will look this up".
+- No "FINAL ANSWER:" prefix. No trailing period. No units unless the question explicitly asks for them.
+- Numbers as digits (e.g. 42, not "forty-two"). Lists comma-separated in the exact order requested.
+- READ THE QUESTION LITERALLY. If it is a riddle or reversed/encoded text, decode it first and answer exactly what it asks.
+- Use web_search + visit_webpage to find and VERIFY facts. If one search query fails or times out, reformulate and try again (vary keywords, try the Wikipedia page directly).
+- If after genuine effort you still cannot verify the answer, return your single best concrete guess in the correct format anyway — a wrong short value scores the same as a narration (zero), but a right guess scores.
+
+QUESTION:
+"""
 
 
 def build_agent() -> CodeAgent:
@@ -103,7 +107,6 @@ def build_agent() -> CodeAgent:
         max_steps=12,
         verbosity_level=1,
         name="GAIAAgent",
-        description=SYSTEM_HINT,
     )
 
 
@@ -113,12 +116,12 @@ def run_one(agent: CodeAgent, q: dict[str, Any]) -> str:
     task_id = q["task_id"]
     question = q["question"]
     has_file = q.get("file_name") not in (None, "")
-    prompt = f"task_id: {task_id}\nQuestion: {question}"
+    prompt = f"{GUIDANCE}task_id: {task_id}\n{question}"
     if has_file:
         prompt += (
-            f"\n\nThis task has an attached file named {q['file_name']!r}. "
-            f"Call download_task_file({task_id!r}) to fetch it, then open it "
-            f"with the appropriate Python library."
+            f"\n\n(There may be a file named {q['file_name']!r}. Try "
+            f"download_task_file({task_id!r}); if it reports no file is "
+            f"mapped, answer from the text if you can, else give your best guess.)"
         )
     return str(agent.run(prompt)).strip()
 

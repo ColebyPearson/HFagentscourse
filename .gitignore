@@ -26,5 +26,9 @@ wandb/
 # Jupyter
 .ipynb_checkpoints/
 
+# GAIA local run outputs (transient; the harness run_local.py is tracked)
+unit_04_final_project/agent/gaia_run_local.json
+unit_04_final_project/agent/task_files/
+
 # Claude Code local discovery (skill / plugin junctions live in unit_*/)
 .claude/
