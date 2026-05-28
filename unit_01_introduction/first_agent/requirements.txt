@@ -3,5 +3,5 @@ huggingface_hub>=0.24.0
 ddgs>=9.0.0
 pytz>=2024.1
 requests>=2.31.0
-gradio>=5.0.0
+gradio>=5.49.0
 PyYAML>=6.0
