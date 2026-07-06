@@ -343,9 +343,16 @@ QUESTION:
 
 
 def _base_model():
-    """Gemini (via its OpenAI-compatible endpoint) when a key is present —
-    much stronger on the web/logic questions — else the HF Qwen model."""
-    if os.environ.get("GEMINI_API_KEY"):
+    """Default: HF Qwen-Coder (reliable with CodeAgent's code-blob format).
+
+    Gemini can be opted into via AGENT_BACKEND=gemini, but note that Gemini
+    tends to emit prose/malformed code blocks that CodeAgent's parser rejects —
+    prefer ToolCallingAgent (JSON tool calls) if routing the base through Gemini.
+    Gemini is still used unconditionally for the image/video handlers above.
+    """
+    if os.environ.get("AGENT_BACKEND", "").lower() == "gemini" and os.environ.get(
+        "GEMINI_API_KEY"
+    ):
         from smolagents import OpenAIServerModel
 
         return OpenAIServerModel(
