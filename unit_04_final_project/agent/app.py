@@ -66,7 +66,7 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 # Base reasoner for the CodeAgent. When GEMINI_API_KEY is set we route the agent
 # through Gemini (much stronger on the web/logic questions than Qwen-Coder);
 # otherwise we fall back to the HF Inference-Providers Qwen model.
-AGENT_GEMINI_MODEL = os.environ.get("AGENT_GEMINI_MODEL", "gemini-3.1-pro-preview")
+AGENT_GEMINI_MODEL = os.environ.get("AGENT_GEMINI_MODEL", "gemini-3.5-flash")
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 # Extensions we can solve without the agent loop.
@@ -342,39 +342,44 @@ QUESTION:
 """
 
 
-def _base_model():
-    """Default: HF Qwen-Coder (reliable with CodeAgent's code-blob format).
+def _use_gemini_backend() -> bool:
+    return os.environ.get("AGENT_BACKEND", "").lower() == "gemini" and bool(
+        os.environ.get("GEMINI_API_KEY")
+    )
 
-    Gemini can be opted into via AGENT_BACKEND=gemini, but note that Gemini
-    tends to emit prose/malformed code blocks that CodeAgent's parser rejects —
-    prefer ToolCallingAgent (JSON tool calls) if routing the base through Gemini.
-    Gemini is still used unconditionally for the image/video handlers above.
+
+def build_agent():
+    """Two backends:
+
+    - Default (Qwen-Coder + CodeAgent): reliable code-blob emission.
+    - AGENT_BACKEND=gemini (Gemini 3.5 Flash + ToolCallingAgent): Gemini emits
+      prose that CodeAgent's parser rejects, so we drive it through JSON tool
+      calls (ToolCallingAgent) instead, which Gemini handles cleanly.
+    Gemini still powers the image/video handlers unconditionally.
     """
-    if os.environ.get("AGENT_BACKEND", "").lower() == "gemini" and os.environ.get(
-        "GEMINI_API_KEY"
-    ):
-        from smolagents import OpenAIServerModel
+    tools = [
+        DuckDuckGoSearchTool(),
+        VisitWebpageTool(),
+        PythonInterpreterTool(),
+        download_task_file,
+    ]
+    if _use_gemini_backend():
+        from smolagents import OpenAIServerModel, ToolCallingAgent
 
-        return OpenAIServerModel(
+        model = OpenAIServerModel(
             model_id=AGENT_GEMINI_MODEL,
             api_base=GEMINI_OPENAI_BASE,
             api_key=os.environ["GEMINI_API_KEY"],
             temperature=0.0,
         )
-    return InferenceClientModel(model_id=MODEL_ID, max_tokens=2048, temperature=0.0)
+        return ToolCallingAgent(
+            model=model, tools=tools, max_steps=12, verbosity_level=1, name="GAIAAgent"
+        )
 
-
-def build_agent() -> CodeAgent:
-    model = _base_model()
+    model = InferenceClientModel(model_id=MODEL_ID, max_tokens=2048, temperature=0.0)
     return CodeAgent(
         model=model,
-        tools=[
-            DuckDuckGoSearchTool(),
-            VisitWebpageTool(),
-            PythonInterpreterTool(),
-            download_task_file,
-            FinalAnswerTool(),
-        ],
+        tools=tools + [FinalAnswerTool()],
         additional_authorized_imports=ALLOWED_IMPORTS,
         max_steps=12,
         verbosity_level=1,
