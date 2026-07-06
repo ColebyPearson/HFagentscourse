@@ -62,7 +62,12 @@ WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
 
 # Gemini handles the multimodal questions a text agent cannot: chess-position
 # images and visual-content videos. Enabled only when GEMINI_API_KEY is set.
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
+# Base reasoner for the CodeAgent. When GEMINI_API_KEY is set we route the agent
+# through Gemini (much stronger on the web/logic questions than Qwen-Coder);
+# otherwise we fall back to the HF Inference-Providers Qwen model.
+AGENT_GEMINI_MODEL = os.environ.get("AGENT_GEMINI_MODEL", "gemini-3.1-pro-preview")
+GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 # Extensions we can solve without the agent loop.
 DETERMINISTIC_EXTS = {"py", "xlsx", "mp3"}
@@ -337,8 +342,23 @@ QUESTION:
 """
 
 
+def _base_model():
+    """Gemini (via its OpenAI-compatible endpoint) when a key is present —
+    much stronger on the web/logic questions — else the HF Qwen model."""
+    if os.environ.get("GEMINI_API_KEY"):
+        from smolagents import OpenAIServerModel
+
+        return OpenAIServerModel(
+            model_id=AGENT_GEMINI_MODEL,
+            api_base=GEMINI_OPENAI_BASE,
+            api_key=os.environ["GEMINI_API_KEY"],
+            temperature=0.0,
+        )
+    return InferenceClientModel(model_id=MODEL_ID, max_tokens=2048, temperature=0.0)
+
+
 def build_agent() -> CodeAgent:
-    model = InferenceClientModel(model_id=MODEL_ID, max_tokens=2048, temperature=0.0)
+    model = _base_model()
     return CodeAgent(
         model=model,
         tools=[
