@@ -60,8 +60,14 @@ MODEL_ID = os.environ.get("AGENT_MODEL_ID", "Qwen/Qwen2.5-Coder-32B-Instruct")
 # on a CPU Space; override with WHISPER_MODEL=tiny if transcription is too slow.
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
 
+# Gemini handles the multimodal questions a text agent cannot: chess-position
+# images and visual-content videos. Enabled only when GEMINI_API_KEY is set.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
+
 # Extensions we can solve without the agent loop.
 DETERMINISTIC_EXTS = {"py", "xlsx", "mp3"}
+# Image extensions Gemini vision can answer (chess position, etc.).
+IMAGE_EXTS = {"png", "jpg", "jpeg", "webp"}
 # Extensions we can fetch as a real file (for the agent backstop tool).
 KNOWN_EXTS = [
     "py",
@@ -216,6 +222,63 @@ def answer_youtube_question(question: str) -> str:
     return extract_with_llm(transcript, question)
 
 
+# ----- Gemini multimodal (images + video) -----------------------------------
+
+# The bare-answer contract, shared with Gemini so its output is graded correctly.
+_GAIA_FORMAT = (
+    "Answer with the BARE value only — a name, number, word, or comma-separated "
+    "list in the order requested. No sentence, no explanation, no trailing period, "
+    "no units unless explicitly asked. Numbers as digits."
+)
+
+
+def _gemini_client():
+    from google import genai
+
+    return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+
+def gemini_answer_image(path: str, ext: str, question: str) -> str:
+    """Answer an image question (e.g. a chess position) with Gemini vision."""
+    from google.genai import types
+
+    client = _gemini_client()
+    mime = "image/jpeg" if ext in ("jpg", "jpeg") else f"image/{ext}"
+    with open(path, "rb") as fh:
+        data = fh.read()
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=[
+            types.Part.from_bytes(data=data, mime_type=mime),
+            f"{question}\n\n{_GAIA_FORMAT}",
+        ],
+    )
+    return (resp.text or "").strip()
+
+
+def gemini_answer_youtube(question: str) -> str:
+    """Answer a YouTube question with Gemini video understanding (handles both
+    spoken content AND on-screen visuals, so it covers 'what does X say' and
+    'how many things appear' alike)."""
+    from google.genai import types
+
+    vid = youtube_id(question)
+    if not vid:
+        raise ValueError("no YouTube id in question")
+    url = f"https://www.youtube.com/watch?v={vid}"
+    client = _gemini_client()
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=types.Content(
+            parts=[
+                types.Part(file_data=types.FileData(file_uri=url)),
+                types.Part(text=f"{question}\n\n{_GAIA_FORMAT}"),
+            ]
+        ),
+    )
+    return (resp.text or "").strip()
+
+
 # ----- Custom agent tool (backstop for file questions) ----------------------
 
 
@@ -316,6 +379,8 @@ def answer_question(agent: CodeAgent, q: dict[str, Any]) -> str:
     fname = q.get("file_name") or ""
     ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
 
+    has_gemini = bool(os.environ.get("GEMINI_API_KEY"))
+
     if ext in DETERMINISTIC_EXTS:
         try:
             return answer_file_question(tid, ext, question)
@@ -325,7 +390,22 @@ def answer_question(agent: CodeAgent, q: dict[str, Any]) -> str:
             )
             return run_one(agent, q)
 
+    # Image questions (e.g. chess position) -> Gemini vision on the gated file.
+    if ext in IMAGE_EXTS and has_gemini:
+        try:
+            return gemini_answer_image(_gaia_file(tid, ext), ext, question)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  gemini image handler failed ({exc}); falling back to agent")
+            return run_one(agent, q)
+
     if not fname and youtube_id(question):
+        # Gemini video covers both spoken + visual content; transcript is the
+        # cheaper fallback for pure "what does X say" cases.
+        if has_gemini:
+            try:
+                return gemini_answer_youtube(question)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  gemini video handler failed ({exc}); trying transcript")
         try:
             return answer_youtube_question(question)
         except Exception as exc:  # noqa: BLE001

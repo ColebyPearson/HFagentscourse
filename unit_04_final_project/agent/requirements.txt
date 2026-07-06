@@ -9,3 +9,4 @@ markdownify>=0.13.0
 huggingface_hub>=0.24.0
 faster-whisper>=1.0.0
 youtube-transcript-api>=0.6.2
+google-genai>=0.3.0
